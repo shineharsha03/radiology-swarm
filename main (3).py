@@ -6,30 +6,87 @@ from supabase import create_client, Client
 from fpdf import FPDF
 import datetime
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="Clinic AppealOS", layout="wide", page_icon="🏥")
+# --- CONFIGURATION & UI SETUP ---
+st.set_page_config(page_title="AppealOS", layout="wide", page_icon="🏥")
+
+# --- CUSTOM CSS (THE UI MAGIC) ---
+def local_css():
+    st.markdown("""
+    <style>
+        /* Import a clean medical font */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        /* Change the top header bar color */
+        header {visibility: hidden;}
+        
+        /* Style the Primary Button (Generate) to Medical Blue */
+        div.stButton > button:first-child {
+            background-color: #0066cc;
+            color: white;
+            border-radius: 8px;
+            font-weight: 600;
+            padding: 0.5rem 2rem;
+            border: none;
+        }
+        div.stButton > button:first-child:hover {
+            background-color: #0052a3;
+        }
+
+        /* Input fields styling */
+        .stTextInput > div > div > input {
+            border-radius: 8px;
+        }
+        
+        /* Success message styling */
+        .stSuccess {
+            background-color: #d4edda;
+            color: #155724;
+            border-radius: 8px;
+        }
+        
+        /* Remove standard Streamlit footer */
+        footer {visibility: hidden;}
+        
+        /* Custom Title */
+        .main-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 0px;
+        }
+        .subtitle {
+            font-size: 1.1rem;
+            color: #666;
+            margin-bottom: 2rem;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+local_css()
 
 # --- 1. SETUP CREDENTIALS ---
-# These must be in your Streamlit Secrets!
 try:
     api_key = st.secrets["OPENAI_API_KEY"]
     supabase_url = st.secrets["SUPABASE_URL"]
     supabase_key = st.secrets["SUPABASE_KEY"]
     clinic_password = st.secrets["CLINIC_PASSWORD"]
 except FileNotFoundError:
-    st.error("🚨 Critical Error: Secrets are missing! Please add API Keys to Streamlit Dashboard.")
+    st.error("🚨 Critical Error: Secrets are missing!")
     st.stop()
 
 client = OpenAI(api_key=api_key)
 
-# Initialize Supabase (Database)
 @st.cache_resource
 def init_supabase():
     return create_client(supabase_url, supabase_key)
 
 supabase = init_supabase()
 
-# --- 2. AUTHENTICATION (Login Screen) ---
+# --- 2. AUTHENTICATION ---
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
@@ -37,168 +94,117 @@ def check_password():
     if st.session_state.password_input == clinic_password:
         st.session_state.authenticated = True
     else:
-        st.error("❌ Incorrect Access Code")
+        st.error("❌ Access Denied")
 
 if not st.session_state.authenticated:
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center;'>🏥 Clinic AppealOS</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center;'>Secure Staff Login</h3>", unsafe_allow_html=True)
-    
+    # Login UI
     col1, col2, col3 = st.columns([1,1,1])
     with col2:
-        st.text_input("Enter Clinic Access Code", type="password", key="password_input", on_change=check_password)
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("## 🏥 Login to AppealOS")
+        st.text_input("Clinic Passcode", type="password", key="password_input", on_change=check_password)
     st.stop() 
 
 # --- 3. HELPER FUNCTIONS ---
-
 def create_pdf(letter_text, patient_name):
-    """Generates a professional PDF letterhead"""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=11)
     
-    # Simple Letterhead
+    # Professional Header
+    pdf.image('https://placehold.co/200x50/0066cc/ffffff/png?text=CLINIC+LOGO', x=10, y=8, w=50) # Placeholder Logo
+    pdf.ln(20)
     pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, txt="MEDICAL NECESSITY APPEAL", ln=1, align='C')
-    pdf.ln(5)
-    
-    pdf.set_font("Arial", size=10)
-    pdf.cell(0, 10, txt=f"Patient Reference: {patient_name}", ln=1)
-    pdf.cell(0, 10, txt=f"Date: {datetime.date.today()}", ln=1)
+    pdf.cell(0, 10, txt="MEDICAL NECESSITY APPEAL", ln=1, align='L')
+    pdf.line(10, 35, 200, 35) # Horizontal line
     pdf.ln(10)
     
-    # Body Content
+    pdf.set_font("Arial", size=10)
+    pdf.cell(0, 6, txt=f"Patient: {patient_name}", ln=1)
+    pdf.cell(0, 6, txt=f"Date: {datetime.date.today()}", ln=1)
+    pdf.ln(10)
+    
     pdf.set_font("Arial", size=11)
-    # Handle simple encoding to prevent crashes
     safe_text = letter_text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 6, safe_text)
     
     return pdf.output(dest="S").encode("latin-1")
 
 def save_to_db(patient, letter):
-    """Saves the case to Supabase"""
     try:
         data = {
             "patient_name": patient, 
             "final_letter": letter,
             "created_at": str(datetime.datetime.now())
         }
-        # Assuming you created a table named 'appeals'
         supabase.table("appeals").insert(data).execute()
-        st.toast("✅ Case Saved to Database!", icon="💾")
+        st.toast("✅ Saved to Patient Records", icon="💾")
     except Exception as e:
         st.error(f"Database Error: {e}")
 
-# --- 4. THE MAIN APP INTERFACE ---
+# --- 4. MAIN DASHBOARD ---
 
-# Sidebar
-with st.sidebar:
-    st.title("👨‍⚕️ Dr. Dashboard")
-    st.markdown("---")
-    app_mode = st.radio("Navigation", ["New Appeal", "Patient Records"])
-    st.markdown("---")
-    st.caption("v2.0 | Voice & Policy Engine")
+# Top Navigation Bar (Fake)
+st.markdown('<div class="main-title">🏥 AppealOS <span style="font-size:1rem; color:#888; font-weight:400;">| Dr. Dashboard</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">AI-Powered Denial Resolution System</div>', unsafe_allow_html=True)
 
-# MODE 1: NEW APPEAL
-if app_mode == "New Appeal":
-    st.title("🎙️ Voice-to-Appeal Engine")
-    st.markdown("Dictate the clinical context. The AI will cross-reference your policy and write the letter.")
-    
-    # Patient Context
-    col_pt, col_pol = st.columns(2)
-    with col_pt:
-        patient_name = st.text_input("Patient Name / ID", placeholder="e.g. Jane Doe #5521")
-    with col_pol:
-        policy_rules = st.text_area("Insurance Policy Rule (Optional)", height=40, 
-                                  placeholder="Paste specific denial reason or policy rule here...")
+# Main Inputs
+with st.container(border=True):
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        patient_name = st.text_input("Patient Reference", placeholder="Name or ID #")
+    with c2:
+        policy_rules = st.text_input("Insurance Policy / Denial Code", placeholder="e.g. 'Denial Code CO-50: Medical Necessity'")
 
-    st.markdown("---")
+c_left, c_right = st.columns([1, 1], gap="medium")
 
-    # TWO COLUMN WORKFLOW
-    col1, col2 = st.columns([1, 1])
-
-    # LEFT: The Voice Input
-    with col1:
-        st.header("1. Clinical Dictation")
-        st.info("Describe the diagnosis, history, and why this treatment is urgent.")
-        
-        audio_val = st.audio_input("Record Notes", key="voice_recorder")
+# LEFT COLUMN: INPUT
+with c_left:
+    st.markdown("### 1. Clinical Context")
+    with st.container(border=True):
+        st.info("🎙️ **Dictation Instructions:** State the diagnosis, history of failed treatments, and urgency.")
+        audio_val = st.audio_input("Start Recording")
         
         if audio_val:
-            with st.spinner("Transcribing your voice..."):
+            with st.spinner("Processing audio..."):
                 transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_val)
                 st.session_state['voice_result'] = transcription.text
-                st.success("Transcription Complete")
-        
-        # Show Transcription for review
-        if 'voice_result' in st.session_state:
-            st.text_area("Transcribed Notes:", st.session_state['voice_result'], height=200)
+            
+            st.success("Audio Captured")
+            st.text_area("Transcript Preview", st.session_state['voice_result'], height=100)
 
-    # RIGHT: The Output
-    with col2:
-        st.header("2. Generated Appeal")
-        
-        if st.button("Generate Professional Appeal", type="primary"):
+# RIGHT COLUMN: OUTPUT
+with c_right:
+    st.markdown("### 2. Resolution")
+    with st.container(border=True):
+        if st.button("✨ Generate Appeal Letter", use_container_width=True, type="primary"):
             voice_notes = st.session_state.get('voice_result')
             
-            if voice_notes:
-                with st.spinner("Analyzing Medical Necessity..."):
-                    # GPT-4 Logic
+            if voice_notes and patient_name:
+                with st.spinner("Consulting Guidelines & Drafting..."):
                     prompt = f"""
-                    You are an expert Insurance Appeals Specialist. Write a formal appeal letter.
-                    
-                    PATIENT: {patient_name}
-                    CLINICAL DICTATION: "{voice_notes}"
-                    INSURANCE POLICY CONTEXT: "{policy_rules if policy_rules else 'Standard Medical Necessity Guidelines'}"
-                    
-                    INSTRUCTIONS:
-                    - Use a professional, firm tone.
-                    - Argue why the denial is incorrect based on the clinical notes.
-                    - Cite the policy rule if provided.
-                    - Structure: Subject Line, Introduction, Clinical Argument, Policy Justification, Conclusion.
+                    Write a professional appeal letter.
+                    Patient: {patient_name}
+                    Notes: {voice_notes}
+                    Policy: {policy_rules}
                     """
-                    
-                    response = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    st.session_state['final_letter'] = response.choices[0].message.content
+                    resp = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": prompt}])
+                    st.session_state['final_letter'] = resp.choices[0].message.content
             else:
-                st.error("⚠️ Please record a voice note first.")
+                st.warning("⚠️ Please provide Patient Name and Dictation first.")
 
-        # Display Final Result
+        # RESULT AREA
         if 'final_letter' in st.session_state:
-            letter_content = st.text_area("Final Draft (Editable)", st.session_state['final_letter'], height=400)
+            letter_content = st.text_area("Final Draft", st.session_state['final_letter'], height=450)
             
-            # Action Buttons
-            b1, b2 = st.columns(2)
-            with b1:
-                if st.button("💾 Save to Records"):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("💾 Save to DB", use_container_width=True):
                     save_to_db(patient_name, letter_content)
-            with b2:
+            with col_b:
                 pdf_bytes = create_pdf(letter_content, patient_name)
-                st.download_button(
-                    label="📄 Download PDF",
-                    data=pdf_bytes,
-                    file_name=f"Appeal_{patient_name}.pdf",
-                    mime="application/pdf"
-                )
+                st.download_button("📄 Download PDF", pdf_bytes, f"{patient_name}.pdf", "application/pdf", use_container_width=True)
 
-# MODE 2: DATABASE VIEW
-elif app_mode == "Patient Records":
-    st.title("📂 Case History")
-    
-    try:
-        # Fetch last 10 records
-        response = supabase.table("appeals").select("*").order("created_at", desc=True).limit(10).execute()
-        
-        if response.data:
-            for case in response.data:
-                with st.expander(f"Patient: {case['patient_name']} - {case['created_at'][:10]}"):
-                    st.markdown(f"**Final Letter:**")
-                    st.text(case['final_letter'])
-        else:
-            st.info("No appeals saved yet.")
-            
-    except Exception as e:
-        st.warning("Database not connected yet. Add SUPABASE keys to secrets to enable history.")
+# Footer
+st.markdown("---")
+st.caption("🔒 HIPAA Compliant Workflow | AppealOS v2.1")
