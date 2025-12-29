@@ -5,6 +5,8 @@ from supabase import create_client
 from fpdf import FPDF
 from tavily import TavilyClient
 import pdfplumber
+from docx import Document
+from io import BytesIO
 import datetime
 
 # --- CONFIGURATION ---
@@ -68,22 +70,18 @@ if not st.session_state.authenticated:
 def extract_from_pdf(uploaded_file):
     """Reads the PDF and asks AI to find the details."""
     try:
-        # A. Read Text
         with pdfplumber.open(uploaded_file) as pdf:
             text = ""
             for page in pdf.pages:
                 text += page.extract_text()
         
-        # B. Analyze with AI
         prompt = f"""
-        Analyze this medical denial letter. Extract the following 4 fields into a simple summary:
+        Analyze this medical denial letter. Extract these 3 fields:
         1. Patient Name
-        2. Insurance Company Name
-        3. Procedure Name / Code being denied
-        4. Denial Reason (The specific rule or code cited)
+        2. Insurance Company
+        3. Denial Reason (The specific rule or code cited)
         
-        DENIAL LETTER TEXT:
-        {text[:4000]}
+        TEXT: {text[:4000]}
         """
         response = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": prompt}])
         return response.choices[0].message.content
@@ -102,45 +100,62 @@ def research_policy(insurance_name, procedure_name):
     except:
         return "Search failed."
 
-# --- 4. MAIN DASHBOARD UI ---
+# --- 4. FILE GENERATORS ---
+
+def create_pdf(text, patient):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=11)
+    # Simple cleanup for unicode characters
+    safe_text = text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 6, safe_text)
+    return pdf.output(dest="S").encode("latin-1")
+
+def create_docx(text, patient):
+    """Generates a Microsoft Word Document"""
+    doc = Document()
+    doc.add_heading('Medical Necessity Appeal', 0)
+    doc.add_paragraph(f"Patient Ref: {patient}")
+    doc.add_paragraph(f"Date: {datetime.date.today()}")
+    doc.add_paragraph("------------------------------------------------")
+    doc.add_paragraph(text)
+    
+    # Save to memory buffer
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# --- 5. MAIN UI ---
 
 st.markdown('<div class="main-title">🏥 AppealOS <span style="font-size:1rem; color:#888;">| Enterprise</span></div>', unsafe_allow_html=True)
 
-# SECTION A: UPLOAD (The New Feature)
+# SECTION A: UPLOAD
 with st.container(border=True):
     uploaded_file = st.file_uploader("📂 Upload Denial Letter (PDF)", type="pdf")
-    
     if uploaded_file and 'pdf_analyzed' not in st.session_state:
         with st.spinner("🧠 AI is reading the denial letter..."):
             analysis = extract_from_pdf(uploaded_file)
             st.session_state['pdf_analysis'] = analysis
             st.session_state['pdf_analyzed'] = True
-            st.success("✅ Extracted Details from PDF")
+            st.success("✅ Extracted Details")
 
-# SECTION B: CONFIRM DETAILS
+# SECTION B: INPUTS
 with st.container(border=True):
-    # If PDF was uploaded, show the analysis
     if 'pdf_analysis' in st.session_state:
-        st.info("💡 **AI Extracted These Details:**")
-        st.write(st.session_state['pdf_analysis'])
-        st.markdown("---")
+        st.info(f"AI Found: {st.session_state['pdf_analysis']}")
 
     c1, c2, c3 = st.columns(3)
-    with c1:
-        patient_name = st.text_input("Patient Name", placeholder="Start typing...")
-    with c2:
-        insurance_name = st.text_input("Insurance Carrier", placeholder="e.g. Aetna")
-    with c3:
-        procedure_name = st.text_input("Procedure / Denial", placeholder="e.g. Crown")
+    with c1: patient_name = st.text_input("Patient Name")
+    with c2: insurance_name = st.text_input("Insurance Carrier")
+    with c3: procedure_name = st.text_input("Procedure / Denial")
 
 # SECTION C: WORKFLOW
 c_left, c_right = st.columns([1, 1], gap="medium")
 
 with c_left:
     st.markdown("### 1. Clinical Defense")
-    st.info("🎙️ Explain why this treatment is medically necessary.")
     audio_val = st.audio_input("Record Dictation")
-    
     if audio_val:
         with st.spinner("Transcribing..."):
             transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_val)
@@ -153,16 +168,16 @@ with c_right:
         voice_notes = st.session_state.get('voice_result')
         
         if voice_notes and patient_name:
-            # 1. RESEARCH
+            # Research
             with st.status("🕵️ Researching Guidelines...", expanded=True) as status:
                 policy_context = research_policy(insurance_name, procedure_name)
                 st.write(policy_context)
                 status.update(label="✅ Policy Found!", state="complete", expanded=False)
             
-            # 2. WRITE
+            # Write
             with st.spinner("Drafting Letter..."):
                 prompt = f"""
-                Write a medical appeal.
+                Write a formal appeal letter.
                 PATIENT: {patient_name}
                 INSURANCE: {insurance_name}
                 PROCEDURE: {procedure_name}
@@ -176,18 +191,31 @@ with c_right:
                 resp = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": prompt}])
                 st.session_state['final_letter'] = resp.choices[0].message.content
         else:
-            st.warning("Please provide Patient Name and Dictation.")
+            st.warning("Missing Data.")
 
-    # DOWNLOAD & SAVE
+    # SECTION D: DOWNLOADS
     if 'final_letter' in st.session_state:
         letter_content = st.text_area("Final Draft", st.session_state['final_letter'], height=400)
         
-        # Save to DB
-        if st.button("💾 Save to Database", use_container_width=True):
-            if supabase:
-                supabase.table("appeals").insert({
-                    "patient_name": patient_name, 
-                    "final_letter": letter_content, 
-                    "created_at": str(datetime.datetime.now())
-                }).execute()
-                st.toast("Saved!", icon="💾")
+        # Action Buttons
+        b1, b2, b3 = st.columns(3)
+        
+        with b1:
+            if st.button("💾 Save to Database", use_container_width=True):
+                if supabase:
+                    supabase.table("appeals").insert({
+                        "patient_name": patient_name, 
+                        "final_letter": letter_content, 
+                        "created_at": str(datetime.datetime.now())
+                    }).execute()
+                    st.toast("Saved!", icon="💾")
+        
+        with b2:
+            # PDF DOWNLOAD
+            pdf_bytes = create_pdf(letter_content, patient_name)
+            st.download_button("📄 Download PDF", pdf_bytes, f"{patient_name}.pdf", "application/pdf", use_container_width=True)
+            
+        with b3:
+            # WORD DOWNLOAD (New Feature)
+            docx_file = create_docx(letter_content, patient_name)
+            st.download_button("📝 Download Word", docx_file, f"{patient_name}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
