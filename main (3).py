@@ -9,7 +9,7 @@ import datetime
 
 # --- CONFIGURATION ---
 st.set_page_config(
-    page_title="AppealOS | Enterprise", 
+    page_title="AppealOS | AI Denial Management", 
     layout="wide", 
     page_icon="🏥",
     initial_sidebar_state="collapsed"
@@ -35,10 +35,55 @@ def local_css():
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1e293b; }
-        .hero-header { font-size: 3rem; font-weight: 800; color: #0f172a; text-align: center; margin-bottom: 0.5rem; }
-        .hero-sub { font-size: 1.1rem; color: #64748b; text-align: center; margin-bottom: 2rem; }
-        [data-testid="stVerticalBlockBorderWrapper"] { border-radius: 12px; padding: 2rem; background: rgba(255, 255, 255, 0.9); border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
-        div.stButton > button:first-child { background: #2563eb; color: white; border-radius: 8px; border: none; padding: 0.6rem 1.2rem; font-weight: 600; }
+        
+        /* Typography */
+        .hero-header { 
+            font-size: 3.5rem; 
+            font-weight: 800; 
+            color: #0f172a; 
+            text-align: center; 
+            line-height: 1.1;
+            margin-bottom: 1rem;
+        }
+        .hero-sub { 
+            font-size: 1.25rem; 
+            color: #475569; 
+            text-align: center; 
+            margin-bottom: 2.5rem; 
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.5;
+        }
+        
+        /* Feature Cards on Landing Page */
+        .feature-card {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+            text-align: center;
+        }
+        
+        /* Glassmorphism for App */
+        [data-testid="stVerticalBlockBorderWrapper"] { 
+            border-radius: 12px; 
+            padding: 2rem; 
+            background: rgba(255, 255, 255, 0.9); 
+            border: 1px solid #e2e8f0; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
+        }
+        
+        /* Buttons */
+        div.stButton > button:first-child { 
+            background: #2563eb; 
+            color: white; 
+            border-radius: 8px; 
+            border: none; 
+            padding: 0.6rem 1.2rem; 
+            font-weight: 600; 
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -56,7 +101,7 @@ def navigate_to(page):
 try:
     api_key = st.secrets["OPENAI_API_KEY"]
     tavily_key = st.secrets["TAVILY_API_KEY"]
-    # Supabase is optional for the UI to load
+    # Supabase is optional
     supabase_url = st.secrets.get("SUPABASE_URL", "")
     supabase_key = st.secrets.get("SUPABASE_KEY", "")
 except:
@@ -71,26 +116,67 @@ try:
     supabase = create_client(supabase_url, supabase_key)
 except: supabase = None
 
-# --- PAGE 1: LANDING ---
+# --- PAGE 1: LANDING PAGE (UPDATED) ---
 if st.session_state.page == "landing":
+    
+    # 1. Navbar
     c1, c2 = st.columns([1, 5])
     with c1: st.markdown("### 🏥 AppealOS")
-    
+
+    # 2. Hero Section
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown('<div class="hero-header">Revenue Recovery,<br>Reimagined.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-sub">The AI workspace for modern medical teams.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-header">Fight Insurance Denials<br>in Seconds.</div>', unsafe_allow_html=True)
     
+    # THE CONCISE INTRO YOU REQUESTED
+    st.markdown("""
+    <div class="hero-sub">
+    AppealOS is an AI agent that <b>reads denial letters</b>, <b>researches payer policies</b> (Aetna, BCBS, etc.), 
+    and <b>writes legal-grade appeals</b> instantly. Stop fighting paperwork. Start recovering revenue.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # 3. Call to Action
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("Log In to Portal", use_container_width=True):
+        if st.button("🚀 Launch Workspace", use_container_width=True):
             navigate_to("login")
     
-    st.image("https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=2070", use_container_width=True)
+    # 4. Feature Grid (Visual Explanation)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    f1, f2, f3 = st.columns(3)
+    
+    with f1:
+        st.markdown("""
+        <div class="feature-card">
+            <div style="font-size: 2rem;">📄</div>
+            <h3>Reads Documents</h3>
+            <p style="color:#64748b; font-size: 0.9rem;">Upload any PDF denial letter. Our Computer Vision extracts codes, patient data, and denial reasons.</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with f2:
+        st.markdown("""
+        <div class="feature-card">
+            <div style="font-size: 2rem;">🧠</div>
+            <h3>Researches Policy</h3>
+            <p style="color:#64748b; font-size: 0.9rem;">The AI Agent browses live insurance websites to find the exact coverage rule you need.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with f3:
+        st.markdown("""
+        <div class="feature-card">
+            <div style="font-size: 2rem;">✍️</div>
+            <h3>Writes Appeals</h3>
+            <p style="color:#64748b; font-size: 0.9rem;">Generates specific, cited legal arguments. Download as PDF or editable Word Doc.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
     st.stop()
 
 # --- PAGE 2: LOGIN ---
 if st.session_state.page == "login":
-    if st.button("← Back"): navigate_to("landing")
+    if st.button("← Back to Home"): navigate_to("landing")
     
     c1, c2, c3 = st.columns([1,1,1])
     with c2:
@@ -155,17 +241,15 @@ with c1: pn = st.text_input("Patient", "John Doe")
 with c2: ins = st.text_input("Insurance")
 with c3: proc = st.text_input("Procedure")
 
-# RENAMED VARIABLES TO PREVENT ERROR
 col_left, col_right = st.columns([1,1])
 
 with col_left:
     st.subheader("Clinical Notes")
-    # Check if audio input is available
     if hasattr(st, "audio_input"):
         av = st.audio_input("Dictate")
     else:
         av = None
-        st.warning("Update Streamlit to use Audio Input")
+        st.warning("Update Streamlit")
         
     if av: 
         st.session_state['v_txt'] = client.audio.transcriptions.create(model="whisper-1", file=av).text
@@ -186,7 +270,6 @@ if 'final' in st.session_state:
     st.markdown("---")
     txt = st.text_area("Draft", st.session_state['final'], height=300)
     
-    # Generate files safely
     try:
         pdf, doc = create_files(txt, pn)
         files_ok = True
