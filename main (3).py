@@ -71,14 +71,13 @@ if not st.session_state.authenticated:
         st.text_input("Clinic Passcode", type="password", key="password_input", on_change=check_password)
     st.stop() 
 
-# --- 3. THE RESEARCH AGENT (NEW!) ---
+# --- 3. THE RESEARCH AGENT ---
 def research_policy(insurance_name, procedure_name):
     """Searches the web for coverage policies"""
     try:
         query = f"{insurance_name} clinical coverage policy for {procedure_name} medical necessity requirements 2024"
         response = tavily.search(query=query, search_depth="advanced", max_results=3)
         
-        # Compile top results into a summary
         context_text = ""
         for result in response['results']:
             context_text += f"- SOURCE: {result['title']}\n  CONTENT: {result['content']}\n\n"
@@ -131,9 +130,9 @@ with st.container(border=True):
     with c1:
         patient_name = st.text_input("Patient Name", placeholder="e.g. Jane Doe")
     with c2:
-        insurance_name = st.text_input("Insurance Carrier", placeholder="e.g. Aetna, BlueCross")
+        insurance_name = st.text_input("Insurance Carrier", placeholder="e.g. Aetna")
     with c3:
-        procedure_name = st.text_input("Procedure / Denial", placeholder="e.g. Crown, MRI Lumbar Spine")
+        procedure_name = st.text_input("Procedure / Denial", placeholder="e.g. Crown")
 
 # Main Workflow
 c_left, c_right = st.columns([1, 1], gap="medium")
@@ -157,7 +156,6 @@ with c_right:
     st.markdown("### 2. Research & Resolution")
     with st.container(border=True):
         
-        # RESEARCHER TOGGLE
         enable_research = st.checkbox("🕵️ Auto-Find Insurance Policy Rule", value=True)
         
         if st.button("✨ Generate Appeal", use_container_width=True, type="primary"):
@@ -165,21 +163,31 @@ with c_right:
             
             if voice_notes and patient_name:
                 
-                # STEP A: THE RESEARCHER
+                # --- STEP A: THE RESEARCHER (DEBUG MODE) ---
                 policy_context = "Standard Medical Necessity Guidelines"
-                if enable_research and insurance_name and procedure_name:
-                    with st.spinner(f"🔍 Searching web for {insurance_name} policies..."):
-                        policy_context = research_policy(insurance_name, procedure_name)
-                        st.expander("View Found Policies").write(policy_context)
                 
-                # STEP B: THE WRITER
+                if enable_research and insurance_name and procedure_name:
+                    with st.status("🕵️ Researching Insurance Policies...", expanded=True) as status:
+                        st.write(f"Searching web for: {insurance_name} + {procedure_name}")
+                        try:
+                            policy_context = research_policy(insurance_name, procedure_name)
+                            
+                            # DEBUGGING: SHOW THE RAW DATA
+                            st.info("Evidence Found:")
+                            st.text_area("RAW RESEARCH DATA", policy_context, height=150)
+                            
+                            status.update(label="✅ Policy Found!", state="complete", expanded=False)
+                        except Exception as e:
+                            st.error(f"Search Failed: {e}")
+                            status.update(label="❌ Search Failed", state="error")
+                
+                # --- STEP B: THE WRITER ---
                 with st.spinner("Drafting Appeal Letter..."):
                     prompt = f"""
                     Write a formal appeal letter.
                     PATIENT: {patient_name}
                     INSURANCE: {insurance_name}
                     PROCEDURE: {procedure_name}
-                    
                     CLINICAL NOTES: {voice_notes}
                     
                     FOUND POLICY RULES (Use this to justify the appeal): 
@@ -187,7 +195,7 @@ with c_right:
                     
                     INSTRUCTIONS:
                     - Be professional and firm.
-                    - Explicitly quote the policy rules found to argue for coverage.
+                    - Explicitly quote the policy rules found in the 'RAW RESEARCH DATA' to argue for coverage.
                     """
                     resp = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": prompt}])
                     st.session_state['final_letter'] = resp.choices[0].message.content
