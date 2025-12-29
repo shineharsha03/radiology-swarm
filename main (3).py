@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # --- USER DATABASE (DEMO) ---
-# In a real app, this would live in Supabase, but this is perfect for the demo.
+# This simulates a secure hospital user directory
 USERS = {
     "admin": {
         "password": "admin123", 
@@ -37,7 +37,7 @@ def local_css():
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1e293b; }
         
-        /* Hero Typography */
+        /* Typography */
         .hero-header { 
             font-size: 3rem; 
             font-weight: 800; 
@@ -132,6 +132,7 @@ if st.session_state.page == "login":
             password = st.text_input("Password", type="password")
             
             if st.button("Sign In", use_container_width=True):
+                # CHECK CREDENTIALS
                 if username in USERS and USERS[username]["password"] == password:
                     st.session_state.user = USERS[username] # Save the Doctor's Profile
                     navigate_to("app")
@@ -143,6 +144,8 @@ if st.session_state.page == "login":
 
 # PERSONALIZED SIDEBAR
 current_user = st.session_state.user
+if not current_user: navigate_to("landing") # Security check
+
 with st.sidebar:
     st.title("🏥 AppealOS")
     st.markdown("---")
@@ -187,41 +190,4 @@ with c1: pn = st.text_input("Patient", "John Doe")
 with c2: ins = st.text_input("Insurance")
 with c3: proc = st.text_input("Procedure")
 
-cL, cR = st.columns([1,1])
-with cL:
-    st.subheader("Clinical Notes")
-    av = st.audio_input("Dictate")
-    if av: 
-        st.session_state['v_txt'] = client.audio.transcriptions.create(model="whisper-1", file=av).text
-        st.success("Saved")
-
-with cR:
-    st.subheader("Actions")
-    if st.button("✨ Generate Appeal", type="primary", use_container_width=True):
-        vn = st.session_state.get('v_txt')
-        if vn:
-            with st.status("Researching..."): pol = research(ins, proc)
-            with st.spinner("Writing..."):
-                pmt = f"Write appeal. Author: {current_user['name']}. Pat: {pn}. Ins: {ins}. Note: {vn}. Pol: {pol}"
-                st.session_state['final'] = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content":pmt}]).choices[0].message.content
-        else: st.warning("Dictate notes first.")
-
-if 'final' in st.session_state:
-    st.markdown("---")
-    txt = st.text_area("Draft", st.session_state['final'], height=300)
-    pdf, doc = create_files(txt, pn)
-    
-    b1, b2, b3 = st.columns(3)
-    with b1:
-        if st.button("💾 Save to DB"):
-            if supabase:
-                # WE NOW SAVE THE DOCTOR NAME TOO
-                supabase.table("appeals").insert({
-                    "patient_name": pn, 
-                    "final_letter": txt, 
-                    "doctor_name": current_user['name'],  # <--- NEW FIELD
-                    "created_at": str(datetime.datetime.now())
-                }).execute()
-                st.toast(f"Saved by {current_user['name']}")
-    with b2: st.download_button("PDF", pdf, "appeal.pdf")
-    with b3: st.download_button("Word", doc, "appeal.docx")
+cL, c
