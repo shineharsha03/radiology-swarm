@@ -4,5 +4,5 @@ numpy
 supabase
 fpdf
 tavily-python
-pdfplumber
 python-docx
+pdfplumber
