@@ -1,79 +1,56 @@
 import streamlit as st
-
-# --- 0. SYSTEM DIAGNOSTICS (RUNS FIRST) ---
-st.set_page_config(page_title="AppealOS", layout="wide", page_icon="🏥")
-st.title("🛠️ System Health Check")
-
-col1, col2, col3 = st.columns(3)
-
-# CHECK 1: PDF Library
-try:
-    from fpdf import FPDF
-    col1.success("✅ PDF Engine: INSTALLED")
-    HAS_PDF = True
-except ImportError:
-    col1.error("❌ PDF Engine: MISSING")
-    HAS_PDF = False
-
-# CHECK 2: Word Library
-try:
-    from docx import Document
-    from io import BytesIO
-    col2.success("✅ Word Engine: INSTALLED")
-    HAS_WORD = True
-except ImportError:
-    col2.error("❌ Word Engine: MISSING (Add 'python-docx' to requirements.txt)")
-    HAS_WORD = False
-
-# CHECK 3: Database
-try:
-    from supabase import create_client
-    col3.success("✅ Database: INSTALLED")
-except ImportError:
-    col3.error("❌ Database: MISSING")
-
-st.markdown("---")
-
-# --- IF LIBRARIES MISSING, STOP HERE ---
-if not HAS_PDF or not HAS_WORD:
-    st.warning("⚠️ CRITICAL: Some libraries are missing. The app cannot run.")
-    st.info("Please go to 'requirements.txt' and ensure it matches the list below:")
-    st.code("""
-streamlit
-openai
-numpy
-supabase
-fpdf
-tavily-python
-pdfplumber
-python-docx
-    """)
-    st.stop()
-
-# --- IF ALL GOOD, LOAD THE APP ---
 import os
 from openai import OpenAI
+from fpdf import FPDF
 import pdfplumber
+from docx import Document
+from io import BytesIO
 import datetime
 
-# --- CUSTOM CSS ---
+# --- CONFIGURATION & PAGE SETUP ---
+st.set_page_config(
+    page_title="AppealOS | AI Revenue Cycle Manager", 
+    layout="wide", 
+    page_icon="🏥",
+    initial_sidebar_state="expanded"
+)
+
+# --- CUSTOM CSS (PROFESSIONAL THEME) ---
 def local_css():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+        
+        /* Clean Headers */
+        h1, h2, h3 { color: #0f172a; }
+        
+        /* Primary Button Style */
         div.stButton > button:first-child {
-            background-color: #0066cc; color: white; border-radius: 6px; border: none;
-            padding: 0.5rem 1rem; font-weight: 600;
+            background-color: #2563eb; 
+            color: white; 
+            border-radius: 8px; 
+            border: none;
+            padding: 0.6rem 1.2rem; 
+            font-weight: 600;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        div.stButton > button:first-child:hover { background-color: #0052a3; }
-        .main-title { font-size: 1.8rem; font-weight: 700; color: #1a1a1a; margin-bottom: 0px; }
+        div.stButton > button:first-child:hover { background-color: #1d4ed8; }
+        
+        /* Cards/Containers */
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            border-radius: 12px; 
+            padding: 1.5rem; 
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
     </style>
     """, unsafe_allow_html=True)
 
 local_css()
 
-# --- 1. CREDENTIALS ---
+# --- 1. CREDENTIALS & CONNECTIONS ---
 try:
     api_key = st.secrets["OPENAI_API_KEY"]
     supabase_url = st.secrets.get("SUPABASE_URL", "")
@@ -81,20 +58,36 @@ try:
     clinic_password = st.secrets["CLINIC_PASSWORD"]
     tavily_key = st.secrets["TAVILY_API_KEY"]
 except KeyError:
-    st.error("🚨 Critical Error: Secrets are missing.")
+    st.error("🚨 System Error: API Keys are missing. Please check settings.")
     st.stop()
 
 client = OpenAI(api_key=api_key)
-# Initialize Tavily
+
+# Connect to Tavily
 from tavily import TavilyClient
 tavily = TavilyClient(api_key=tavily_key)
-# Initialize Supabase
+
+# Connect to Supabase
 try:
+    from supabase import create_client
     supabase = create_client(supabase_url, supabase_key)
 except:
     supabase = None
 
-# --- 2. LOGIN SECURITY ---
+# --- 2. SIDEBAR & LOGOUT ---
+with st.sidebar:
+    st.markdown("## 🏥 AppealOS")
+    st.caption("AI-Powered Denial Management")
+    st.markdown("---")
+    st.markdown("**User:** Dr. Admin")
+    st.markdown("**Clinic:** Downtown Medical")
+    st.markdown("---")
+    st.info("System Status: 🟢 Online")
+    if st.button("Log Out"):
+        st.session_state.authenticated = False
+        st.rerun()
+
+# --- 3. LOGIN SECURITY ---
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
@@ -102,14 +95,17 @@ def check_password():
     if st.session_state.password_input == clinic_password:
         st.session_state.authenticated = True
     else:
-        st.error("❌ Invalid Access Code")
+        st.error("❌ Access Denied")
 
 if not st.session_state.authenticated:
-    st.markdown("### 🏥 AppealOS Login")
-    st.text_input("Clinic Passcode", type="password", key="password_input", on_change=check_password)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1,1,1])
+    with c2:
+        st.markdown("### 🔒 Secure Login")
+        st.text_input("Enter Clinic Passcode", type="password", key="password_input", on_change=check_password)
     st.stop() 
 
-# --- 3. INTELLIGENT AGENTS ---
+# --- 4. CORE AI FUNCTIONS ---
 def extract_from_pdf(uploaded_file):
     try:
         with pdfplumber.open(uploaded_file) as pdf:
@@ -139,9 +135,9 @@ def research_policy(insurance_name, procedure_name):
             context += f"- {result['content']}\n"
         return context
     except:
-        return "Search failed."
+        return "Manual Policy Search Required."
 
-# --- 4. FILE GENERATORS ---
+# --- 5. FILE GENERATORS ---
 def create_pdf(text, patient):
     pdf = FPDF()
     pdf.add_page()
@@ -163,52 +159,60 @@ def create_docx(text, patient):
     buffer.seek(0)
     return buffer
 
-# --- 5. MAIN UI ---
-st.markdown('<div class="main-title">🏥 AppealOS <span style="font-size:1rem; color:#888;">| Enterprise</span></div>', unsafe_allow_html=True)
+# --- 6. MAIN DASHBOARD ---
+
+st.title("AppealOS Dashboard")
+st.markdown("Create data-driven appeal letters in seconds.")
 
 # SECTION A: UPLOAD
-with st.container(border=True):
-    uploaded_file = st.file_uploader("📂 Upload Denial Letter (PDF)", type="pdf")
+with st.container():
+    uploaded_file = st.file_uploader("📂 Drag & Drop Denial Letter (PDF)", type="pdf")
     if uploaded_file and 'pdf_analyzed' not in st.session_state:
-        with st.spinner("🧠 AI is reading the denial letter..."):
+        with st.spinner("🧠 AI is scanning document..."):
             analysis = extract_from_pdf(uploaded_file)
             st.session_state['pdf_analysis'] = analysis
             st.session_state['pdf_analyzed'] = True
-            st.success("✅ Extracted Details")
+            st.success("Analysis Complete")
 
-# SECTION B: INPUTS
-with st.container(border=True):
+# SECTION B: CASE DETAILS
+with st.expander("📝 Case Details", expanded=True):
     if 'pdf_analysis' in st.session_state:
-        st.info(f"AI Found: {st.session_state['pdf_analysis']}")
+        st.info(f"**AI Findings:** {st.session_state['pdf_analysis']}")
+    
     c1, c2, c3 = st.columns(3)
     with c1: patient_name = st.text_input("Patient Name", value="John Doe")
-    with c2: insurance_name = st.text_input("Insurance Carrier")
-    with c3: procedure_name = st.text_input("Procedure / Denial")
+    with c2: insurance_name = st.text_input("Insurance Carrier", placeholder="e.g. Aetna")
+    with c3: procedure_name = st.text_input("Procedure / Denial", placeholder="e.g. Crown")
 
 # SECTION C: WORKFLOW
-c_left, c_right = st.columns([1, 1], gap="medium")
+c_left, c_right = st.columns([1, 1], gap="large")
 
 with c_left:
-    st.markdown("### 1. Clinical Defense")
+    st.subheader("1. Clinical Defense")
+    st.info("🎙️ **Doctor's Note:** Explain why this treatment is necessary.")
     audio_val = st.audio_input("Record Dictation")
     if audio_val:
         with st.spinner("Transcribing..."):
             transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_val)
             st.session_state['voice_result'] = transcription.text
-        st.success("Captured")
+        st.success("Dictation Saved")
 
 with c_right:
-    st.markdown("### 2. Resolution")
-    if st.button("✨ Generate Appeal", type="primary", use_container_width=True):
+    st.subheader("2. Resolution")
+    st.write("AI will research policy guidelines and draft the legal argument.")
+    
+    if st.button("✨ Generate Appeal Package", type="primary", use_container_width=True):
         voice_notes = st.session_state.get('voice_result')
         
         if voice_notes and patient_name:
-            with st.status("🕵️ Researching Guidelines...", expanded=True) as status:
+            # 1. Research
+            with st.status("🕵️ Agent is researching policies...", expanded=True) as status:
                 policy_context = research_policy(insurance_name, procedure_name)
                 st.write(policy_context)
-                status.update(label="✅ Policy Found!", state="complete", expanded=False)
+                status.update(label="✅ Policies Retrieved", state="complete", expanded=False)
             
-            with st.spinner("Drafting Letter..."):
+            # 2. Write
+            with st.spinner("Drafting legal arguments..."):
                 prompt = f"""
                 Write a formal appeal letter.
                 PATIENT: {patient_name}
@@ -216,39 +220,39 @@ with c_right:
                 PROCEDURE: {procedure_name}
                 CLINICAL NOTES: {voice_notes}
                 POLICY RULES FOUND: {policy_context}
-                INSTRUCTIONS: Professional tone. Use the policy rules.
+                INSTRUCTIONS: Professional tone. CITE the policy rules found.
                 """
                 resp = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": prompt}])
                 st.session_state['final_letter'] = resp.choices[0].message.content
         else:
-            st.warning("Missing Data.")
+            st.warning("⚠️ Please record a voice note first.")
 
-    # SECTION D: DOWNLOADS (The Moment of Truth)
+    # DOWNLOAD SECTION
     if 'final_letter' in st.session_state:
         st.markdown("---")
-        st.write("### 3. Save & Download")
+        st.subheader("3. Export")
         letter_content = st.text_area("Final Draft", st.session_state['final_letter'], height=400)
         
-        # 1. Generate Files FIRST (Before any buttons)
+        # Prepare Files
         try:
             pdf_bytes = create_pdf(letter_content, patient_name)
             docx_file = create_docx(letter_content, patient_name)
             files_ready = True
-        except Exception as e:
-            st.error(f"❌ File Generation Error: {e}")
+        except:
+            st.error("File generation error.")
             files_ready = False
 
         col_a, col_b, col_c = st.columns(3)
         
         with col_a:
-            if st.button("💾 Save to Database", use_container_width=True):
+            if st.button("💾 Save to Record", use_container_width=True):
                 if supabase:
                     supabase.table("appeals").insert({
                         "patient_name": patient_name, 
                         "final_letter": letter_content, 
                         "created_at": str(datetime.datetime.now())
                     }).execute()
-                    st.toast("Saved!", icon="💾")
+                    st.toast("Record Saved", icon="💾")
 
         if files_ready:
             with col_b:
