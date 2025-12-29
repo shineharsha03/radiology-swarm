@@ -5,8 +5,13 @@ from supabase import create_client
 from fpdf import FPDF
 from tavily import TavilyClient
 import pdfplumber
-from docx import Document
-from io import BytesIO
+# We wrap the import to catch installation errors
+try:
+    from docx import Document
+    from io import BytesIO
+    HAS_WORD = True
+except ImportError:
+    HAS_WORD = False
 import datetime
 
 # --- CONFIGURATION ---
@@ -18,11 +23,6 @@ def local_css():
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-        div.stButton > button:first-child {
-            background-color: #0066cc; color: white; border-radius: 6px; border: none;
-            padding: 0.5rem 1rem; font-weight: 600;
-        }
-        div.stButton > button:first-child:hover { background-color: #0052a3; }
         .main-title { font-size: 1.8rem; font-weight: 700; color: #1a1a1a; margin-bottom: 0px; }
     </style>
     """, unsafe_allow_html=True)
@@ -97,27 +97,30 @@ def research_policy(insurance_name, procedure_name):
     except:
         return "Search failed."
 
-# --- 4. FILE GENERATORS (SAFE MODE) ---
+# --- 4. FILE GENERATORS ---
 def create_pdf(text, patient):
     try:
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=11)
-        # Fix special characters that crash PDF generation
+        # Clean text
         safe_text = text.encode('latin-1', 'replace').decode('latin-1')
         pdf.multi_cell(0, 6, safe_text)
         return pdf.output(dest="S").encode("latin-1")
     except Exception as e:
+        st.error(f"PDF Error: {e}")
         return None
 
 def create_docx(text, patient):
+    if not HAS_WORD:
+        st.error("❌ Library Missing: python-docx not installed in requirements.txt")
+        return None
     try:
         doc = Document()
         doc.add_heading('Medical Necessity Appeal', 0)
         doc.add_paragraph(f"Patient Ref: {patient}")
         doc.add_paragraph(f"Date: {datetime.date.today()}")
         doc.add_paragraph("------------------------------------------------")
-        # Split by newlines to keep formatting
         for para in text.split('\n'):
             doc.add_paragraph(para)
         
@@ -126,6 +129,7 @@ def create_docx(text, patient):
         buffer.seek(0)
         return buffer
     except Exception as e:
+        st.error(f"Word Error: {e}")
         return None
 
 # --- 5. MAIN UI ---
@@ -170,13 +174,11 @@ with c_right:
         voice_notes = st.session_state.get('voice_result')
         
         if voice_notes and patient_name:
-            # Research
             with st.status("🕵️ Researching Guidelines...", expanded=True) as status:
                 policy_context = research_policy(insurance_name, procedure_name)
                 st.write(policy_context)
                 status.update(label="✅ Policy Found!", state="complete", expanded=False)
             
-            # Write
             with st.spinner("Drafting Letter..."):
                 prompt = f"""
                 Write a formal appeal letter.
@@ -185,44 +187,41 @@ with c_right:
                 PROCEDURE: {procedure_name}
                 CLINICAL NOTES: {voice_notes}
                 POLICY RULES FOUND: {policy_context}
-                
-                INSTRUCTIONS:
-                - Professional tone.
-                - Use the policy rules to justify the claim.
+                INSTRUCTIONS: Professional tone. Use the policy rules.
                 """
                 resp = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": prompt}])
                 st.session_state['final_letter'] = resp.choices[0].message.content
         else:
             st.warning("Missing Data.")
 
-    # SECTION D: DOWNLOADS (DEBUGGED)
+    # SECTION D: DOWNLOADS (VERTICAL STACK)
     if 'final_letter' in st.session_state:
+        st.markdown("---")
+        st.write("### 3. Save & Download")
         letter_content = st.text_area("Final Draft", st.session_state['final_letter'], height=400)
         
-        # We generate the files OUTSIDE the columns first to check for errors
+        # 1. DATABASE SAVE
+        if st.button("💾 Save to Database", use_container_width=True):
+            if supabase:
+                supabase.table("appeals").insert({
+                    "patient_name": patient_name, 
+                    "final_letter": letter_content, 
+                    "created_at": str(datetime.datetime.now())
+                }).execute()
+                st.toast("Saved!", icon="💾")
+
+        # 2. FILE GENERATION
+        st.write("Generating Files...") # Debug Message
         pdf_bytes = create_pdf(letter_content, patient_name)
         docx_file = create_docx(letter_content, patient_name)
         
-        b1, b2, b3 = st.columns(3)
-        
-        with b1:
-            if st.button("💾 Save to Database", use_container_width=True):
-                if supabase:
-                    supabase.table("appeals").insert({
-                        "patient_name": patient_name, 
-                        "final_letter": letter_content, 
-                        "created_at": str(datetime.datetime.now())
-                    }).execute()
-                    st.toast("Saved!", icon="💾")
-        
-        with b2:
-            if pdf_bytes:
-                st.download_button("📄 Download PDF", pdf_bytes, f"{patient_name}.pdf", "application/pdf", use_container_width=True)
-            else:
-                st.error("PDF Failed")
-            
-        with b3:
-            if docx_file:
-                st.download_button("📝 Download Word", docx_file, f"{patient_name}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
-            else:
-                st.error("Word Failed")
+        # 3. BUTTONS
+        if pdf_bytes:
+            st.download_button("📄 Download PDF", pdf_bytes, f"{patient_name}.pdf", "application/pdf", use_container_width=True)
+        else:
+            st.error("PDF Generation Failed")
+
+        if docx_file:
+            st.download_button("📝 Download Word", docx_file, f"{patient_name}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+        else:
+            st.error("Word Generation Failed (Check requirements.txt)")
