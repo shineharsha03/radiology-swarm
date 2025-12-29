@@ -9,71 +9,66 @@ import datetime
 
 # --- CONFIGURATION ---
 st.set_page_config(
-    page_title="AppealOS | AI for Healthcare", 
+    page_title="AppealOS | Enterprise", 
     layout="wide", 
     page_icon="🏥",
     initial_sidebar_state="collapsed"
 )
 
-# --- MODERN CSS THEME (Glassmorphism) ---
+# --- USER DATABASE (DEMO) ---
+# In a real app, this would live in Supabase, but this is perfect for the demo.
+USERS = {
+    "admin": {
+        "password": "admin123", 
+        "name": "Dr. Lara Raj",
+        "role": "Medical Director"
+    },
+    "staff": {
+        "password": "staff123", 
+        "name": "Dr. John Smith",
+        "role": "Senior Resident"
+    }
+}
+
+# --- MODERN CSS THEME ---
 def local_css():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
-        
-        /* Global Font */
         html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1e293b; }
         
-        /* Landing Page Hero */
+        /* Hero Typography */
         .hero-header { 
-            font-size: 3.5rem; 
+            font-size: 3rem; 
             font-weight: 800; 
             color: #0f172a; 
             text-align: center; 
-            line-height: 1.1; 
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
         }
         .hero-sub { 
-            font-size: 1.2rem; 
-            color: #475569; 
+            font-size: 1.1rem; 
+            color: #64748b; 
             text-align: center; 
-            margin-bottom: 3rem; 
-            max-width: 800px;
-            margin-left: auto; 
-            margin-right: auto;
+            margin-bottom: 2rem; 
         }
         
-        /* Modern Cards (Glassmorphism) */
+        /* Glassmorphism Cards */
         [data-testid="stVerticalBlockBorderWrapper"] {
-            border-radius: 16px; 
+            border-radius: 12px; 
             padding: 2rem; 
             background: rgba(255, 255, 255, 0.9);
             border: 1px solid #e2e8f0;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
-            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         }
         
         /* Buttons */
         div.stButton > button:first-child {
-            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            background: #2563eb;
             color: white; 
-            border-radius: 50px; 
+            border-radius: 8px; 
             border: none;
-            padding: 0.75rem 2rem; 
+            padding: 0.6rem 1.2rem;
             font-weight: 600;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
-        }
-        div.stButton > button:first-child:hover { 
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
-        }
-        
-        /* Sidebar Styling */
-        [data-testid="stSidebar"] {
-            background-color: #f8fafc;
-            border-right: 1px solid #e2e8f0;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -81,24 +76,22 @@ def local_css():
 local_css()
 
 # --- STATE MANAGEMENT ---
-if 'page' not in st.session_state:
-    st.session_state.page = "landing"
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
+if 'page' not in st.session_state: st.session_state.page = "landing"
+if 'user' not in st.session_state: st.session_state.user = None
 
 def navigate_to(page):
     st.session_state.page = page
     st.rerun()
 
-# --- 1. CREDENTIALS ---
+# --- CREDENTIALS ---
 try:
     api_key = st.secrets["OPENAI_API_KEY"]
+    tavily_key = st.secrets["TAVILY_API_KEY"]
+    # Supabase is optional for the UI to load
     supabase_url = st.secrets.get("SUPABASE_URL", "")
     supabase_key = st.secrets.get("SUPABASE_KEY", "")
-    clinic_password = st.secrets["CLINIC_PASSWORD"]
-    tavily_key = st.secrets["TAVILY_API_KEY"]
-except KeyError:
-    st.error("🚨 System Error: Secrets missing.")
+except:
+    st.error("🚨 Secrets Missing")
     st.stop()
 
 client = OpenAI(api_key=api_key)
@@ -107,173 +100,128 @@ tavily = TavilyClient(api_key=tavily_key)
 try:
     from supabase import create_client
     supabase = create_client(supabase_url, supabase_key)
-except:
-    supabase = None
+except: supabase = None
 
-# --- PAGE 1: THE LANDING PAGE ---
+# --- PAGE 1: LANDING ---
 if st.session_state.page == "landing":
+    c1, c2 = st.columns([1, 5])
+    with c1: st.markdown("### 🏥 AppealOS")
     
-    # Navbar (Fake)
-    c1, c2 = st.columns([1, 4])
-    with c1:
-        st.markdown("### 🏥 AppealOS")
-    with c2:
-        st.write("") # Spacer
-
-    # Hero Section
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown('<div class="hero-header">Stop Denials.<br>Start Revenue.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-sub">The AI-powered revenue cycle manager that researches policies, writes medical appeals, and recovers lost revenue in seconds.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-header">Revenue Recovery,<br>Reimagined.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-sub">The AI workspace for modern medical teams.</div>', unsafe_allow_html=True)
     
-    # Call to Action
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("🚀 Launch App", use_container_width=True):
+        if st.button("Log In to Portal", use_container_width=True):
             navigate_to("login")
     
-    # Features Grid
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    f1, f2, f3 = st.columns(3)
-    
-    with f1:
-        with st.container(border=True):
-            st.markdown("### 🤖 AI Researcher")
-            st.write("Automatically searches Aetna, Cigna, and BCBS policies in real-time.")
-    
-    with f2:
-        with st.container(border=True):
-            st.markdown("### 👁️ Document Vision")
-            st.write("Drag & drop denial PDFs. The AI extracts codes and patient data instantly.")
-            
-    with f3:
-        with st.container(border=True):
-            st.markdown("### 📝 Legal Writer")
-            st.write("Generates medical necessity letters citing specific clinical guidelines.")
-            
+    st.image("https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=2070", use_container_width=True)
     st.stop()
 
-
-# --- PAGE 2: LOGIN SCREEN ---
+# --- PAGE 2: LOGIN (MULTI-USER) ---
 if st.session_state.page == "login":
+    if st.button("← Back"): navigate_to("landing")
     
-    if st.button("← Back to Home"):
-        navigate_to("landing")
+    c1, c2, c3 = st.columns([1,1,1])
+    with c2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("### 👨‍⚕️ Doctor Login")
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            
+            if st.button("Sign In", use_container_width=True):
+                if username in USERS and USERS[username]["password"] == password:
+                    st.session_state.user = USERS[username] # Save the Doctor's Profile
+                    navigate_to("app")
+                else:
+                    st.error("Invalid Username or Password")
+    st.stop()
 
-    if not st.session_state.authenticated:
-        c1, c2, c3 = st.columns([1,1,1])
-        with c2:
-            st.markdown("<br><br>", unsafe_allow_html=True)
-            with st.container(border=True):
-                st.markdown("### 🔐 Client Portal")
-                st.text_input("Access Key", type="password", key="password_input")
-                
-                if st.button("Sign In", use_container_width=True):
-                    if st.session_state.password_input == clinic_password:
-                        st.session_state.authenticated = True
-                        st.rerun()
-                    else:
-                        st.error("Invalid Key")
-        st.stop()
+# --- PAGE 3: THE APP ---
 
-
-# --- PAGE 3: THE APP (Only if Authenticated) ---
-
-# Sidebar Navigation
+# PERSONALIZED SIDEBAR
+current_user = st.session_state.user
 with st.sidebar:
-    st.markdown("### 🏥 AppealOS")
-    st.caption("Enterprise Edition")
+    st.title("🏥 AppealOS")
     st.markdown("---")
-    st.info("🟢 System Active")
+    # Show the Doctor's Name dynamically
+    st.markdown(f"### 👋 Welcome, \n**{current_user['name']}**")
+    st.caption(current_user['role'])
+    st.markdown("---")
     if st.button("Log Out"):
-        st.session_state.authenticated = False
+        st.session_state.user = None
         navigate_to("landing")
 
-# Core Functions (Same as before)
-def extract_from_pdf(uploaded_file):
+# AI Functions
+def extract_from_pdf(f):
     try:
-        with pdfplumber.open(uploaded_file) as pdf:
-            text = ""
-            for page in pdf.pages:
-                text += page.extract_text() or ""
-        prompt = f"Analyze this denial letter. Extract: 1. Patient 2. Insurance 3. Reason. Text: {text[:4000]}"
-        response = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": prompt}])
-        return response.choices[0].message.content
-    except: return "Error reading PDF"
+        with pdfplumber.open(f) as pdf: t = "".join([p.extract_text() for p in pdf.pages])
+        p = f"Extract: 1.Patient 2.Insurance 3.Reason from: {t[:3000]}"
+        return client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content":p}]).choices[0].message.content
+    except: return "Error"
 
-def research_policy(insurance, procedure):
-    try:
-        q = f"{insurance} coverage policy {procedure} medical necessity 2024"
-        res = tavily.search(query=q, search_depth="advanced", max_results=3)
-        return "\n".join([r['content'] for r in res['results']])
-    except: return "Search failed"
+def research(ins, proc):
+    try: return "\n".join([r['content'] for r in tavily.search(query=f"{ins} policy {proc} 2024", max_results=3)['results']])
+    except: return "Manual Search Needed"
 
-def create_pdf(text, p):
-    pdf = FPDF(); pdf.add_page(); pdf.set_font("Arial", size=11)
-    pdf.multi_cell(0, 6, text.encode('latin-1', 'replace').decode('latin-1'))
-    return pdf.output(dest="S").encode("latin-1")
+def create_files(txt, pat):
+    pdf = FPDF(); pdf.add_page(); pdf.set_font("Arial", size=11); pdf.multi_cell(0, 6, txt.encode('latin-1','replace').decode('latin-1'))
+    doc = Document(); doc.add_paragraph(txt); b = BytesIO(); doc.save(b); b.seek(0)
+    return pdf.output(dest="S").encode('latin-1'), b
 
-def create_docx(text, p):
-    doc = Document(); doc.add_paragraph(text)
-    b = BytesIO(); doc.save(b); b.seek(0); return b
+# UI
+st.title("My Workspace")
 
-# Main UI
-st.title("AppealOS Dashboard")
-
-# App Layout
 with st.container(border=True):
-    uploaded_file = st.file_uploader("📂 Upload Denial Letter (PDF)", type="pdf")
-    if uploaded_file and 'pdf_analyzed' not in st.session_state:
-        with st.spinner("Scanning..."):
-            st.session_state['pdf_analysis'] = extract_from_pdf(uploaded_file)
-            st.session_state['pdf_analyzed'] = True
-            st.success("Scanned")
+    uf = st.file_uploader("📂 Upload Denial", type="pdf")
+    if uf and 'scan' not in st.session_state:
+        st.session_state['scan'] = extract_from_pdf(uf)
+        st.success("Scanned")
 
-if 'pdf_analysis' in st.session_state:
-    st.info(f"**Findings:** {st.session_state['pdf_analysis']}")
+if 'scan' in st.session_state: st.info(st.session_state['scan'])
 
 c1, c2, c3 = st.columns(3)
-with c1: patient_name = st.text_input("Patient Name", value="John Doe")
-with c2: insurance_name = st.text_input("Insurance")
-with c3: procedure_name = st.text_input("Procedure")
+with c1: pn = st.text_input("Patient", "John Doe")
+with c2: ins = st.text_input("Insurance")
+with c3: proc = st.text_input("Procedure")
 
-c_left, c_right = st.columns([1, 1], gap="large")
-
-with c_left:
-    st.subheader("1. Defense")
-    audio_val = st.audio_input("Dictate Notes")
-    if audio_val:
-        with st.spinner("Transcribing..."):
-            t = client.audio.transcriptions.create(model="whisper-1", file=audio_val)
-            st.session_state['voice_result'] = t.text
+cL, cR = st.columns([1,1])
+with cL:
+    st.subheader("Clinical Notes")
+    av = st.audio_input("Dictate")
+    if av: 
+        st.session_state['v_txt'] = client.audio.transcriptions.create(model="whisper-1", file=av).text
         st.success("Saved")
 
-with c_right:
-    st.subheader("2. Resolution")
-    if st.button("✨ Generate Package", type="primary", use_container_width=True):
-        vn = st.session_state.get('voice_result')
+with cR:
+    st.subheader("Actions")
+    if st.button("✨ Generate Appeal", type="primary", use_container_width=True):
+        vn = st.session_state.get('v_txt')
         if vn:
-            with st.status("🕵️ AI Researching...", expanded=True):
-                pol = research_policy(insurance_name, procedure_name)
-                st.write(pol)
-            
-            with st.spinner("Drafting..."):
-                prompt = f"Write appeal. Patient: {patient_name}. Ins: {insurance_name}. Notes: {vn}. Policy: {pol}"
-                r = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": prompt}])
-                st.session_state['final_letter'] = r.choices[0].message.content
-        else: st.warning("Need dictation.")
+            with st.status("Researching..."): pol = research(ins, proc)
+            with st.spinner("Writing..."):
+                pmt = f"Write appeal. Author: {current_user['name']}. Pat: {pn}. Ins: {ins}. Note: {vn}. Pol: {pol}"
+                st.session_state['final'] = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content":pmt}]).choices[0].message.content
+        else: st.warning("Dictate notes first.")
 
-    if 'final_letter' in st.session_state:
-        st.markdown("---")
-        lc = st.text_area("Draft", st.session_state['final_letter'], height=300)
-        try:
-            pdf = create_pdf(lc, patient_name)
-            doc = create_docx(lc, patient_name)
-            
-            b1, b2, b3 = st.columns(3)
-            with b1: 
-                if st.button("💾 Save"):
-                    if supabase: supabase.table("appeals").insert({"patient_name":patient_name, "final_letter":lc}).execute()
-                    st.toast("Saved")
-            with b2: st.download_button("📄 PDF", pdf, "appeal.pdf")
-            with b3: st.download_button("📝 Word", doc, "appeal.docx")
-        except: st.error("File error")
+if 'final' in st.session_state:
+    st.markdown("---")
+    txt = st.text_area("Draft", st.session_state['final'], height=300)
+    pdf, doc = create_files(txt, pn)
+    
+    b1, b2, b3 = st.columns(3)
+    with b1:
+        if st.button("💾 Save to DB"):
+            if supabase:
+                # WE NOW SAVE THE DOCTOR NAME TOO
+                supabase.table("appeals").insert({
+                    "patient_name": pn, 
+                    "final_letter": txt, 
+                    "doctor_name": current_user['name'],  # <--- NEW FIELD
+                    "created_at": str(datetime.datetime.now())
+                }).execute()
+                st.toast(f"Saved by {current_user['name']}")
+    with b2: st.download_button("PDF", pdf, "appeal.pdf")
+    with b3: st.download_button("Word", doc, "appeal.docx")
