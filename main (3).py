@@ -44,14 +44,14 @@ except KeyError:
 
 client = OpenAI(api_key=api_key)
 
-# Initialize Supabase
-@st.cache_resource
-def init_supabase():
-    return create_client(supabase_url, supabase_key)
+# --- 2. INITIALIZE SUPABASE (NO CACHE) ---
+# We removed @st.cache_resource to force a fresh connection every time
+try:
+    supabase = create_client(supabase_url, supabase_key)
+except Exception as e:
+    st.error(f"⚠️ Connection Error: {e}")
 
-supabase = init_supabase()
-
-# --- 2. LOGIN SECURITY ---
+# --- 3. LOGIN SECURITY ---
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
@@ -69,7 +69,7 @@ if not st.session_state.authenticated:
         st.text_input("Clinic Passcode", type="password", key="password_input", on_change=check_password)
     st.stop() 
 
-# --- 3. HELPER FUNCTIONS ---
+# --- 4. HELPER FUNCTIONS ---
 def create_pdf(letter_text, patient_name):
     pdf = FPDF()
     pdf.add_page()
@@ -106,7 +106,7 @@ def save_to_db(patient, letter):
     except Exception as e:
         st.error(f"Database Error: {e}")
 
-# --- 4. MAIN DASHBOARD UI ---
+# --- 5. MAIN DASHBOARD UI ---
 
 st.markdown('<div class="main-title">🏥 AppealOS <span style="font-size:1rem; color:#888;">| Professional Edition</span></div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">AI-Powered Revenue Cycle Management</div>', unsafe_allow_html=True)
