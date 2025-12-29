@@ -66,14 +66,12 @@ if not st.session_state.authenticated:
     st.stop() 
 
 # --- 3. INTELLIGENT AGENTS ---
-
 def extract_from_pdf(uploaded_file):
-    """Reads the PDF and asks AI to find the details."""
     try:
         with pdfplumber.open(uploaded_file) as pdf:
             text = ""
             for page in pdf.pages:
-                text += page.extract_text()
+                text += page.extract_text() or ""
         
         prompt = f"""
         Analyze this medical denial letter. Extract these 3 fields:
@@ -89,7 +87,6 @@ def extract_from_pdf(uploaded_file):
         return f"Error reading PDF: {e}"
 
 def research_policy(insurance_name, procedure_name):
-    """Searches web for policies."""
     try:
         query = f"{insurance_name} clinical coverage policy for {procedure_name} medical necessity requirements 2024"
         response = tavily.search(query=query, search_depth="advanced", max_results=3)
@@ -100,31 +97,36 @@ def research_policy(insurance_name, procedure_name):
     except:
         return "Search failed."
 
-# --- 4. FILE GENERATORS ---
-
+# --- 4. FILE GENERATORS (SAFE MODE) ---
 def create_pdf(text, patient):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=11)
-    # Simple cleanup for unicode characters
-    safe_text = text.encode('latin-1', 'replace').decode('latin-1')
-    pdf.multi_cell(0, 6, safe_text)
-    return pdf.output(dest="S").encode("latin-1")
+    try:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=11)
+        # Fix special characters that crash PDF generation
+        safe_text = text.encode('latin-1', 'replace').decode('latin-1')
+        pdf.multi_cell(0, 6, safe_text)
+        return pdf.output(dest="S").encode("latin-1")
+    except Exception as e:
+        return None
 
 def create_docx(text, patient):
-    """Generates a Microsoft Word Document"""
-    doc = Document()
-    doc.add_heading('Medical Necessity Appeal', 0)
-    doc.add_paragraph(f"Patient Ref: {patient}")
-    doc.add_paragraph(f"Date: {datetime.date.today()}")
-    doc.add_paragraph("------------------------------------------------")
-    doc.add_paragraph(text)
-    
-    # Save to memory buffer
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
+    try:
+        doc = Document()
+        doc.add_heading('Medical Necessity Appeal', 0)
+        doc.add_paragraph(f"Patient Ref: {patient}")
+        doc.add_paragraph(f"Date: {datetime.date.today()}")
+        doc.add_paragraph("------------------------------------------------")
+        # Split by newlines to keep formatting
+        for para in text.split('\n'):
+            doc.add_paragraph(para)
+        
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        return buffer
+    except Exception as e:
+        return None
 
 # --- 5. MAIN UI ---
 
@@ -146,7 +148,7 @@ with st.container(border=True):
         st.info(f"AI Found: {st.session_state['pdf_analysis']}")
 
     c1, c2, c3 = st.columns(3)
-    with c1: patient_name = st.text_input("Patient Name")
+    with c1: patient_name = st.text_input("Patient Name", value="John Doe")
     with c2: insurance_name = st.text_input("Insurance Carrier")
     with c3: procedure_name = st.text_input("Procedure / Denial")
 
@@ -193,11 +195,14 @@ with c_right:
         else:
             st.warning("Missing Data.")
 
-    # SECTION D: DOWNLOADS
+    # SECTION D: DOWNLOADS (DEBUGGED)
     if 'final_letter' in st.session_state:
         letter_content = st.text_area("Final Draft", st.session_state['final_letter'], height=400)
         
-        # Action Buttons
+        # We generate the files OUTSIDE the columns first to check for errors
+        pdf_bytes = create_pdf(letter_content, patient_name)
+        docx_file = create_docx(letter_content, patient_name)
+        
         b1, b2, b3 = st.columns(3)
         
         with b1:
@@ -211,11 +216,13 @@ with c_right:
                     st.toast("Saved!", icon="💾")
         
         with b2:
-            # PDF DOWNLOAD
-            pdf_bytes = create_pdf(letter_content, patient_name)
-            st.download_button("📄 Download PDF", pdf_bytes, f"{patient_name}.pdf", "application/pdf", use_container_width=True)
+            if pdf_bytes:
+                st.download_button("📄 Download PDF", pdf_bytes, f"{patient_name}.pdf", "application/pdf", use_container_width=True)
+            else:
+                st.error("PDF Failed")
             
         with b3:
-            # WORD DOWNLOAD (New Feature)
-            docx_file = create_docx(letter_content, patient_name)
-            st.download_button("📝 Download Word", docx_file, f"{patient_name}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+            if docx_file:
+                st.download_button("📝 Download Word", docx_file, f"{patient_name}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+            else:
+                st.error("Word Failed")
