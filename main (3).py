@@ -35,9 +35,8 @@ local_css()
 # --- 1. CREDENTIALS ---
 try:
     api_key = st.secrets["OPENAI_API_KEY"]
-    # We use .get() to avoid crashing if keys are missing during setup
-    supabase_url = st.secrets.get("SUPABASE_URL", "")
-    supabase_key = st.secrets.get("SUPABASE_KEY", "")
+    supabase_url = st.secrets["SUPABASE_URL"]
+    supabase_key = st.secrets["SUPABASE_KEY"]
     clinic_password = st.secrets["CLINIC_PASSWORD"]
 except KeyError:
     st.error("🚨 Critical Error: Secrets are missing.")
@@ -45,11 +44,9 @@ except KeyError:
 
 client = OpenAI(api_key=api_key)
 
-# Initialize Supabase with the Verified Logic
+# Initialize Supabase
 @st.cache_resource
 def init_supabase():
-    if not supabase_url or not supabase_key:
-        return None
     return create_client(supabase_url, supabase_key)
 
 supabase = init_supabase()
@@ -98,18 +95,12 @@ def create_pdf(letter_text, patient_name):
     return pdf.output(dest="S").encode("latin-1")
 
 def save_to_db(patient, letter):
-    """Verified Save Logic"""
-    if not supabase:
-        st.error("Database connection missing.")
-        return
-
     try:
         data = {
             "patient_name": patient, 
             "final_letter": letter,
             "created_at": str(datetime.datetime.now())
         }
-        # This is the exact line that worked in the diagnostic script
         supabase.table("appeals").insert(data).execute()
         st.toast("✅ Saved to Secure Database", icon="💾")
     except Exception as e:
