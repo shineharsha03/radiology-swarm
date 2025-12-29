@@ -1,12 +1,12 @@
 import streamlit as st
 import os
-import base64
 from openai import OpenAI
-from supabase import create_client, Client
+from supabase import create_client
 from fpdf import FPDF
+from tavily import TavilyClient
 import datetime
 
-# --- CONFIGURATION & UI SETUP ---
+# --- CONFIGURATION ---
 st.set_page_config(page_title="AppealOS", layout="wide", page_icon="🏥")
 
 # --- CUSTOM CSS ---
@@ -35,23 +35,25 @@ local_css()
 # --- 1. CREDENTIALS ---
 try:
     api_key = st.secrets["OPENAI_API_KEY"]
-    supabase_url = st.secrets["SUPABASE_URL"]
-    supabase_key = st.secrets["SUPABASE_KEY"]
+    supabase_url = st.secrets.get("SUPABASE_URL", "")
+    supabase_key = st.secrets.get("SUPABASE_KEY", "")
     clinic_password = st.secrets["CLINIC_PASSWORD"]
+    tavily_key = st.secrets["TAVILY_API_KEY"]
 except KeyError:
-    st.error("🚨 Critical Error: Secrets are missing.")
+    st.error("🚨 Critical Error: Secrets are missing (Check TAVILY_API_KEY).")
     st.stop()
 
 client = OpenAI(api_key=api_key)
 
-# --- 2. INITIALIZE SUPABASE (NO CACHE) ---
-# We removed @st.cache_resource to force a fresh connection every time
+# Initialize Clients
 try:
     supabase = create_client(supabase_url, supabase_key)
-except Exception as e:
-    st.error(f"⚠️ Connection Error: {e}")
+except:
+    supabase = None
 
-# --- 3. LOGIN SECURITY ---
+tavily = TavilyClient(api_key=tavily_key)
+
+# --- 2. LOGIN SECURITY ---
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
@@ -68,6 +70,22 @@ if not st.session_state.authenticated:
         st.markdown("### 🏥 AppealOS Login")
         st.text_input("Clinic Passcode", type="password", key="password_input", on_change=check_password)
     st.stop() 
+
+# --- 3. THE RESEARCH AGENT (NEW!) ---
+def research_policy(insurance_name, procedure_name):
+    """Searches the web for coverage policies"""
+    try:
+        query = f"{insurance_name} clinical coverage policy for {procedure_name} medical necessity requirements 2024"
+        response = tavily.search(query=query, search_depth="advanced", max_results=3)
+        
+        # Compile top results into a summary
+        context_text = ""
+        for result in response['results']:
+            context_text += f"- SOURCE: {result['title']}\n  CONTENT: {result['content']}\n\n"
+            
+        return context_text
+    except Exception as e:
+        return f"Error searching web: {e}"
 
 # --- 4. HELPER FUNCTIONS ---
 def create_pdf(letter_text, patient_name):
@@ -95,12 +113,9 @@ def create_pdf(letter_text, patient_name):
     return pdf.output(dest="S").encode("latin-1")
 
 def save_to_db(patient, letter):
+    if not supabase: return
     try:
-        data = {
-            "patient_name": patient, 
-            "final_letter": letter,
-            "created_at": str(datetime.datetime.now())
-        }
+        data = { "patient_name": patient, "final_letter": letter, "created_at": str(datetime.datetime.now()) }
         supabase.table("appeals").insert(data).execute()
         st.toast("✅ Saved to Secure Database", icon="💾")
     except Exception as e:
@@ -108,58 +123,76 @@ def save_to_db(patient, letter):
 
 # --- 5. MAIN DASHBOARD UI ---
 
-st.markdown('<div class="main-title">🏥 AppealOS <span style="font-size:1rem; color:#888;">| Professional Edition</span></div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">AI-Powered Revenue Cycle Management</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🏥 AppealOS <span style="font-size:1rem; color:#888;">| Research Edition</span></div>', unsafe_allow_html=True)
 
 # Top Bar
 with st.container(border=True):
-    c1, c2 = st.columns([1, 2])
+    c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
-        patient_name = st.text_input("Patient Name / ID", placeholder="e.g. John Doe #9921")
+        patient_name = st.text_input("Patient Name", placeholder="e.g. Jane Doe")
     with c2:
-        policy_rules = st.text_input("Denial Context / Policy Code", placeholder="e.g. 'Denial CO-50: Not Medically Necessary'")
+        insurance_name = st.text_input("Insurance Carrier", placeholder="e.g. Aetna, BlueCross")
+    with c3:
+        procedure_name = st.text_input("Procedure / Denial", placeholder="e.g. Crown, MRI Lumbar Spine")
 
 # Main Workflow
 c_left, c_right = st.columns([1, 1], gap="medium")
 
 # LEFT: INPUT
 with c_left:
-    st.markdown("### 1. Clinical Dictation")
+    st.markdown("### 1. Clinical Context")
     with st.container(border=True):
-        st.info("🎙️ Instructions: Explain the diagnosis, previous failed treatments, and urgency.")
-        audio_val = st.audio_input("Record Clinical Notes")
+        st.info("🎙️ **Doctor's Notes:** Explain why the patient needs this treatment.")
+        audio_val = st.audio_input("Record Dictation")
         
         if audio_val:
             with st.spinner("Processing Audio..."):
                 transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_val)
                 st.session_state['voice_result'] = transcription.text
             st.success("Dictation Captured")
-            st.text_area("Transcript", st.session_state['voice_result'], height=120)
+            st.text_area("Transcript", st.session_state['voice_result'], height=100)
 
 # RIGHT: OUTPUT
 with c_right:
-    st.markdown("### 2. Resolution")
+    st.markdown("### 2. Research & Resolution")
     with st.container(border=True):
-        if st.button("✨ Generate Appeal Letter", use_container_width=True, type="primary"):
+        
+        # RESEARCHER TOGGLE
+        enable_research = st.checkbox("🕵️ Auto-Find Insurance Policy Rule", value=True)
+        
+        if st.button("✨ Generate Appeal", use_container_width=True, type="primary"):
             voice_notes = st.session_state.get('voice_result')
             
             if voice_notes and patient_name:
-                with st.spinner("Consulting Guidelines & Drafting..."):
+                
+                # STEP A: THE RESEARCHER
+                policy_context = "Standard Medical Necessity Guidelines"
+                if enable_research and insurance_name and procedure_name:
+                    with st.spinner(f"🔍 Searching web for {insurance_name} policies..."):
+                        policy_context = research_policy(insurance_name, procedure_name)
+                        st.expander("View Found Policies").write(policy_context)
+                
+                # STEP B: THE WRITER
+                with st.spinner("Drafting Appeal Letter..."):
                     prompt = f"""
-                    Write a formal medical appeal letter.
+                    Write a formal appeal letter.
                     PATIENT: {patient_name}
-                    CONTEXT: {policy_rules}
-                    NOTES: {voice_notes}
+                    INSURANCE: {insurance_name}
+                    PROCEDURE: {procedure_name}
+                    
+                    CLINICAL NOTES: {voice_notes}
+                    
+                    FOUND POLICY RULES (Use this to justify the appeal): 
+                    {policy_context}
                     
                     INSTRUCTIONS:
-                    - Professional, firm tone.
-                    - Cite the 'Medical Necessity' based on the notes.
-                    - Format: Header, Argument, Conclusion.
+                    - Be professional and firm.
+                    - Explicitly quote the policy rules found to argue for coverage.
                     """
                     resp = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": prompt}])
                     st.session_state['final_letter'] = resp.choices[0].message.content
             else:
-                st.warning("⚠️ Please provide Patient Name and Voice Dictation.")
+                st.warning("⚠️ Please provide Patient Name and Dictation.")
 
         # Results & Export
         if 'final_letter' in st.session_state:
