@@ -1,21 +1,60 @@
 import streamlit as st
-import os
-from openai import OpenAI
-from supabase import create_client
-from fpdf import FPDF
-from tavily import TavilyClient
-import pdfplumber
-# We wrap the import to catch installation errors
+
+# --- 0. SYSTEM DIAGNOSTICS (RUNS FIRST) ---
+st.set_page_config(page_title="AppealOS", layout="wide", page_icon="🏥")
+st.title("🛠️ System Health Check")
+
+col1, col2, col3 = st.columns(3)
+
+# CHECK 1: PDF Library
+try:
+    from fpdf import FPDF
+    col1.success("✅ PDF Engine: INSTALLED")
+    HAS_PDF = True
+except ImportError:
+    col1.error("❌ PDF Engine: MISSING")
+    HAS_PDF = False
+
+# CHECK 2: Word Library
 try:
     from docx import Document
     from io import BytesIO
+    col2.success("✅ Word Engine: INSTALLED")
     HAS_WORD = True
 except ImportError:
+    col2.error("❌ Word Engine: MISSING (Add 'python-docx' to requirements.txt)")
     HAS_WORD = False
-import datetime
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="AppealOS", layout="wide", page_icon="🏥")
+# CHECK 3: Database
+try:
+    from supabase import create_client
+    col3.success("✅ Database: INSTALLED")
+except ImportError:
+    col3.error("❌ Database: MISSING")
+
+st.markdown("---")
+
+# --- IF LIBRARIES MISSING, STOP HERE ---
+if not HAS_PDF or not HAS_WORD:
+    st.warning("⚠️ CRITICAL: Some libraries are missing. The app cannot run.")
+    st.info("Please go to 'requirements.txt' and ensure it matches the list below:")
+    st.code("""
+streamlit
+openai
+numpy
+supabase
+fpdf
+tavily-python
+pdfplumber
+python-docx
+    """)
+    st.stop()
+
+# --- IF ALL GOOD, LOAD THE APP ---
+import os
+from openai import OpenAI
+import pdfplumber
+import datetime
 
 # --- CUSTOM CSS ---
 def local_css():
@@ -23,6 +62,11 @@ def local_css():
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+        div.stButton > button:first-child {
+            background-color: #0066cc; color: white; border-radius: 6px; border: none;
+            padding: 0.5rem 1rem; font-weight: 600;
+        }
+        div.stButton > button:first-child:hover { background-color: #0052a3; }
         .main-title { font-size: 1.8rem; font-weight: 700; color: #1a1a1a; margin-bottom: 0px; }
     </style>
     """, unsafe_allow_html=True)
@@ -41,7 +85,10 @@ except KeyError:
     st.stop()
 
 client = OpenAI(api_key=api_key)
+# Initialize Tavily
+from tavily import TavilyClient
 tavily = TavilyClient(api_key=tavily_key)
+# Initialize Supabase
 try:
     supabase = create_client(supabase_url, supabase_key)
 except:
@@ -58,11 +105,8 @@ def check_password():
         st.error("❌ Invalid Access Code")
 
 if not st.session_state.authenticated:
-    col1, col2, col3 = st.columns([1,1,1])
-    with col2:
-        st.markdown("<br><br><br>", unsafe_allow_html=True)
-        st.markdown("### 🏥 AppealOS Login")
-        st.text_input("Clinic Passcode", type="password", key="password_input", on_change=check_password)
+    st.markdown("### 🏥 AppealOS Login")
+    st.text_input("Clinic Passcode", type="password", key="password_input", on_change=check_password)
     st.stop() 
 
 # --- 3. INTELLIGENT AGENTS ---
@@ -99,41 +143,27 @@ def research_policy(insurance_name, procedure_name):
 
 # --- 4. FILE GENERATORS ---
 def create_pdf(text, patient):
-    try:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=11)
-        # Clean text
-        safe_text = text.encode('latin-1', 'replace').decode('latin-1')
-        pdf.multi_cell(0, 6, safe_text)
-        return pdf.output(dest="S").encode("latin-1")
-    except Exception as e:
-        st.error(f"PDF Error: {e}")
-        return None
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=11)
+    safe_text = text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 6, safe_text)
+    return pdf.output(dest="S").encode("latin-1")
 
 def create_docx(text, patient):
-    if not HAS_WORD:
-        st.error("❌ Library Missing: python-docx not installed in requirements.txt")
-        return None
-    try:
-        doc = Document()
-        doc.add_heading('Medical Necessity Appeal', 0)
-        doc.add_paragraph(f"Patient Ref: {patient}")
-        doc.add_paragraph(f"Date: {datetime.date.today()}")
-        doc.add_paragraph("------------------------------------------------")
-        for para in text.split('\n'):
-            doc.add_paragraph(para)
-        
-        buffer = BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-        return buffer
-    except Exception as e:
-        st.error(f"Word Error: {e}")
-        return None
+    doc = Document()
+    doc.add_heading('Medical Necessity Appeal', 0)
+    doc.add_paragraph(f"Patient Ref: {patient}")
+    doc.add_paragraph(f"Date: {datetime.date.today()}")
+    doc.add_paragraph("---")
+    for para in text.split('\n'):
+        doc.add_paragraph(para)
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
 
 # --- 5. MAIN UI ---
-
 st.markdown('<div class="main-title">🏥 AppealOS <span style="font-size:1rem; color:#888;">| Enterprise</span></div>', unsafe_allow_html=True)
 
 # SECTION A: UPLOAD
@@ -150,7 +180,6 @@ with st.container(border=True):
 with st.container(border=True):
     if 'pdf_analysis' in st.session_state:
         st.info(f"AI Found: {st.session_state['pdf_analysis']}")
-
     c1, c2, c3 = st.columns(3)
     with c1: patient_name = st.text_input("Patient Name", value="John Doe")
     with c2: insurance_name = st.text_input("Insurance Carrier")
@@ -194,34 +223,35 @@ with c_right:
         else:
             st.warning("Missing Data.")
 
-    # SECTION D: DOWNLOADS (VERTICAL STACK)
+    # SECTION D: DOWNLOADS (The Moment of Truth)
     if 'final_letter' in st.session_state:
         st.markdown("---")
         st.write("### 3. Save & Download")
         letter_content = st.text_area("Final Draft", st.session_state['final_letter'], height=400)
         
-        # 1. DATABASE SAVE
-        if st.button("💾 Save to Database", use_container_width=True):
-            if supabase:
-                supabase.table("appeals").insert({
-                    "patient_name": patient_name, 
-                    "final_letter": letter_content, 
-                    "created_at": str(datetime.datetime.now())
-                }).execute()
-                st.toast("Saved!", icon="💾")
+        # 1. Generate Files FIRST (Before any buttons)
+        try:
+            pdf_bytes = create_pdf(letter_content, patient_name)
+            docx_file = create_docx(letter_content, patient_name)
+            files_ready = True
+        except Exception as e:
+            st.error(f"❌ File Generation Error: {e}")
+            files_ready = False
 
-        # 2. FILE GENERATION
-        st.write("Generating Files...") # Debug Message
-        pdf_bytes = create_pdf(letter_content, patient_name)
-        docx_file = create_docx(letter_content, patient_name)
+        col_a, col_b, col_c = st.columns(3)
         
-        # 3. BUTTONS
-        if pdf_bytes:
-            st.download_button("📄 Download PDF", pdf_bytes, f"{patient_name}.pdf", "application/pdf", use_container_width=True)
-        else:
-            st.error("PDF Generation Failed")
+        with col_a:
+            if st.button("💾 Save to Database", use_container_width=True):
+                if supabase:
+                    supabase.table("appeals").insert({
+                        "patient_name": patient_name, 
+                        "final_letter": letter_content, 
+                        "created_at": str(datetime.datetime.now())
+                    }).execute()
+                    st.toast("Saved!", icon="💾")
 
-        if docx_file:
-            st.download_button("📝 Download Word", docx_file, f"{patient_name}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
-        else:
-            st.error("Word Generation Failed (Check requirements.txt)")
+        if files_ready:
+            with col_b:
+                st.download_button("📄 Download PDF", pdf_bytes, f"{patient_name}.pdf", "application/pdf", use_container_width=True)
+            with col_c:
+                st.download_button("📝 Download Word", docx_file, f"{patient_name}.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
