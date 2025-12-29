@@ -16,7 +16,6 @@ st.set_page_config(
 )
 
 # --- USER DATABASE (DEMO) ---
-# This simulates a secure hospital user directory
 USERS = {
     "admin": {
         "password": "admin123", 
@@ -30,46 +29,16 @@ USERS = {
     }
 }
 
-# --- MODERN CSS THEME ---
+# --- CSS THEME ---
 def local_css():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1e293b; }
-        
-        /* Typography */
-        .hero-header { 
-            font-size: 3rem; 
-            font-weight: 800; 
-            color: #0f172a; 
-            text-align: center; 
-            margin-bottom: 0.5rem;
-        }
-        .hero-sub { 
-            font-size: 1.1rem; 
-            color: #64748b; 
-            text-align: center; 
-            margin-bottom: 2rem; 
-        }
-        
-        /* Glassmorphism Cards */
-        [data-testid="stVerticalBlockBorderWrapper"] {
-            border-radius: 12px; 
-            padding: 2rem; 
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        }
-        
-        /* Buttons */
-        div.stButton > button:first-child {
-            background: #2563eb;
-            color: white; 
-            border-radius: 8px; 
-            border: none;
-            padding: 0.6rem 1.2rem;
-            font-weight: 600;
-        }
+        .hero-header { font-size: 3rem; font-weight: 800; color: #0f172a; text-align: center; margin-bottom: 0.5rem; }
+        .hero-sub { font-size: 1.1rem; color: #64748b; text-align: center; margin-bottom: 2rem; }
+        [data-testid="stVerticalBlockBorderWrapper"] { border-radius: 12px; padding: 2rem; background: rgba(255, 255, 255, 0.9); border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+        div.stButton > button:first-child { background: #2563eb; color: white; border-radius: 8px; border: none; padding: 0.6rem 1.2rem; font-weight: 600; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -119,7 +88,7 @@ if st.session_state.page == "landing":
     st.image("https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&q=80&w=2070", use_container_width=True)
     st.stop()
 
-# --- PAGE 2: LOGIN (MULTI-USER) ---
+# --- PAGE 2: LOGIN ---
 if st.session_state.page == "login":
     if st.button("← Back"): navigate_to("landing")
     
@@ -132,24 +101,20 @@ if st.session_state.page == "login":
             password = st.text_input("Password", type="password")
             
             if st.button("Sign In", use_container_width=True):
-                # CHECK CREDENTIALS
                 if username in USERS and USERS[username]["password"] == password:
-                    st.session_state.user = USERS[username] # Save the Doctor's Profile
+                    st.session_state.user = USERS[username]
                     navigate_to("app")
                 else:
                     st.error("Invalid Username or Password")
     st.stop()
 
 # --- PAGE 3: THE APP ---
-
-# PERSONALIZED SIDEBAR
 current_user = st.session_state.user
-if not current_user: navigate_to("landing") # Security check
+if not current_user: navigate_to("landing")
 
 with st.sidebar:
     st.title("🏥 AppealOS")
     st.markdown("---")
-    # Show the Doctor's Name dynamically
     st.markdown(f"### 👋 Welcome, \n**{current_user['name']}**")
     st.caption(current_user['role'])
     st.markdown("---")
@@ -157,7 +122,7 @@ with st.sidebar:
         st.session_state.user = None
         navigate_to("landing")
 
-# AI Functions
+# FUNCTIONS
 def extract_from_pdf(f):
     try:
         with pdfplumber.open(f) as pdf: t = "".join([p.extract_text() for p in pdf.pages])
@@ -174,7 +139,7 @@ def create_files(txt, pat):
     doc = Document(); doc.add_paragraph(txt); b = BytesIO(); doc.save(b); b.seek(0)
     return pdf.output(dest="S").encode('latin-1'), b
 
-# UI
+# MAIN UI
 st.title("My Workspace")
 
 with st.container(border=True):
@@ -190,4 +155,56 @@ with c1: pn = st.text_input("Patient", "John Doe")
 with c2: ins = st.text_input("Insurance")
 with c3: proc = st.text_input("Procedure")
 
-cL, c
+# RENAMED VARIABLES TO PREVENT ERROR
+col_left, col_right = st.columns([1,1])
+
+with col_left:
+    st.subheader("Clinical Notes")
+    # Check if audio input is available
+    if hasattr(st, "audio_input"):
+        av = st.audio_input("Dictate")
+    else:
+        av = None
+        st.warning("Update Streamlit to use Audio Input")
+        
+    if av: 
+        st.session_state['v_txt'] = client.audio.transcriptions.create(model="whisper-1", file=av).text
+        st.success("Saved")
+
+with col_right:
+    st.subheader("Actions")
+    if st.button("✨ Generate Appeal", type="primary", use_container_width=True):
+        vn = st.session_state.get('v_txt')
+        if vn:
+            with st.status("Researching..."): pol = research(ins, proc)
+            with st.spinner("Writing..."):
+                pmt = f"Write appeal. Author: {current_user['name']}. Pat: {pn}. Ins: {ins}. Note: {vn}. Pol: {pol}"
+                st.session_state['final'] = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content":pmt}]).choices[0].message.content
+        else: st.warning("Dictate notes first.")
+
+if 'final' in st.session_state:
+    st.markdown("---")
+    txt = st.text_area("Draft", st.session_state['final'], height=300)
+    
+    # Generate files safely
+    try:
+        pdf, doc = create_files(txt, pn)
+        files_ok = True
+    except:
+        files_ok = False
+        st.error("Error creating files")
+
+    if files_ok:
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            if st.button("💾 Save to DB"):
+                if supabase:
+                    supabase.table("appeals").insert({
+                        "patient_name": pn, 
+                        "final_letter": txt, 
+                        "doctor_name": current_user['name'],
+                        "created_at": str(datetime.datetime.now())
+                    }).execute()
+                    st.toast(f"Saved by {current_user['name']}")
+        with b2: st.download_button("PDF", pdf, "appeal.pdf")
+        with b3: st.download_button("Word", doc, "appeal.docx")
