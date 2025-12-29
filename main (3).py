@@ -1,32 +1,183 @@
 import streamlit as st
-from supabase import create_client
+import os
+import base64
+from openai import OpenAI
+from supabase import create_client, Client
+from fpdf import FPDF
+import datetime
 
-st.title("🚑 Database Connection Doctor")
+# --- CONFIGURATION & UI SETUP ---
+st.set_page_config(page_title="AppealOS", layout="wide", page_icon="🏥")
 
-# 1. READ SECRETS
-url = st.secrets.get("SUPABASE_URL", "")
-key = st.secrets.get("SUPABASE_KEY", "")
+# --- CUSTOM CSS ---
+def local_css():
+    st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+        header {visibility: hidden;}
+        div.stButton > button:first-child {
+            background-color: #0066cc; color: white; border-radius: 6px; border: none;
+            padding: 0.5rem 1rem; font-weight: 600;
+        }
+        div.stButton > button:first-child:hover { background-color: #0052a3; }
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            border-radius: 10px; padding: 1rem; background-color: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .main-title { font-size: 1.8rem; font-weight: 700; color: #1a1a1a; margin-bottom: 0px; }
+        .subtitle { font-size: 0.9rem; color: #666; margin-bottom: 2rem; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# 2. CHECK FORMAT
-st.write(f"**URL Checked:** `{url}`")
-if "supabase.com/dashboard" in url:
-    st.error("❌ ERROR: You are using the Dashboard Link! Use the Project URL from Settings > API.")
-elif "postgres://" in url:
-    st.error("❌ ERROR: You are using the Postgres Connection string! Use the URL starting with 'https'.")
-elif " " in url:
-    st.error("❌ ERROR: You have a hidden space in your URL. Check your secrets.")
-else:
-    st.success("✅ URL Format looks correct.")
+local_css()
 
-# 3. TEST CONNECTION
-if st.button("Test Connection Now"):
+# --- 1. CREDENTIALS ---
+try:
+    api_key = st.secrets["OPENAI_API_KEY"]
+    # We use .get() to avoid crashing if keys are missing during setup
+    supabase_url = st.secrets.get("SUPABASE_URL", "")
+    supabase_key = st.secrets.get("SUPABASE_KEY", "")
+    clinic_password = st.secrets["CLINIC_PASSWORD"]
+except KeyError:
+    st.error("🚨 Critical Error: Secrets are missing.")
+    st.stop()
+
+client = OpenAI(api_key=api_key)
+
+# Initialize Supabase with the Verified Logic
+@st.cache_resource
+def init_supabase():
+    if not supabase_url or not supabase_key:
+        return None
+    return create_client(supabase_url, supabase_key)
+
+supabase = init_supabase()
+
+# --- 2. LOGIN SECURITY ---
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
+def check_password():
+    if st.session_state.password_input == clinic_password:
+        st.session_state.authenticated = True
+    else:
+        st.error("❌ Invalid Access Code")
+
+if not st.session_state.authenticated:
+    col1, col2, col3 = st.columns([1,1,1])
+    with col2:
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
+        st.markdown("### 🏥 AppealOS Login")
+        st.text_input("Clinic Passcode", type="password", key="password_input", on_change=check_password)
+    st.stop() 
+
+# --- 3. HELPER FUNCTIONS ---
+def create_pdf(letter_text, patient_name):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=11)
+    
+    # Header
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, txt="MEDICAL NECESSITY APPEAL", ln=1, align='L')
+    pdf.line(10, 25, 200, 25)
+    pdf.ln(10)
+    
+    # Metadata
+    pdf.set_font("Arial", size=10)
+    pdf.cell(0, 6, txt=f"Patient Ref: {patient_name}", ln=1)
+    pdf.cell(0, 6, txt=f"Date Generated: {datetime.date.today()}", ln=1)
+    pdf.ln(10)
+    
+    # Body
+    pdf.set_font("Arial", size=11)
+    safe_text = letter_text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 6, safe_text)
+    
+    return pdf.output(dest="S").encode("latin-1")
+
+def save_to_db(patient, letter):
+    """Verified Save Logic"""
+    if not supabase:
+        st.error("Database connection missing.")
+        return
+
     try:
-        supabase = create_client(url, key)
-        # Try to insert a dummy row
-        data = {"patient_name": "Test Connection", "final_letter": "System Check"}
-        response = supabase.table("appeals").insert(data).execute()
-        st.success("🎉 SUCCESS! Connected and Saved to Database.")
-        st.write(response)
+        data = {
+            "patient_name": patient, 
+            "final_letter": letter,
+            "created_at": str(datetime.datetime.now())
+        }
+        # This is the exact line that worked in the diagnostic script
+        supabase.table("appeals").insert(data).execute()
+        st.toast("✅ Saved to Secure Database", icon="💾")
     except Exception as e:
-        st.error(f"Still Failing. Raw Error below:")
-        st.code(str(e))
+        st.error(f"Database Error: {e}")
+
+# --- 4. MAIN DASHBOARD UI ---
+
+st.markdown('<div class="main-title">🏥 AppealOS <span style="font-size:1rem; color:#888;">| Professional Edition</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">AI-Powered Revenue Cycle Management</div>', unsafe_allow_html=True)
+
+# Top Bar
+with st.container(border=True):
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        patient_name = st.text_input("Patient Name / ID", placeholder="e.g. John Doe #9921")
+    with c2:
+        policy_rules = st.text_input("Denial Context / Policy Code", placeholder="e.g. 'Denial CO-50: Not Medically Necessary'")
+
+# Main Workflow
+c_left, c_right = st.columns([1, 1], gap="medium")
+
+# LEFT: INPUT
+with c_left:
+    st.markdown("### 1. Clinical Dictation")
+    with st.container(border=True):
+        st.info("🎙️ Instructions: Explain the diagnosis, previous failed treatments, and urgency.")
+        audio_val = st.audio_input("Record Clinical Notes")
+        
+        if audio_val:
+            with st.spinner("Processing Audio..."):
+                transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_val)
+                st.session_state['voice_result'] = transcription.text
+            st.success("Dictation Captured")
+            st.text_area("Transcript", st.session_state['voice_result'], height=120)
+
+# RIGHT: OUTPUT
+with c_right:
+    st.markdown("### 2. Resolution")
+    with st.container(border=True):
+        if st.button("✨ Generate Appeal Letter", use_container_width=True, type="primary"):
+            voice_notes = st.session_state.get('voice_result')
+            
+            if voice_notes and patient_name:
+                with st.spinner("Consulting Guidelines & Drafting..."):
+                    prompt = f"""
+                    Write a formal medical appeal letter.
+                    PATIENT: {patient_name}
+                    CONTEXT: {policy_rules}
+                    NOTES: {voice_notes}
+                    
+                    INSTRUCTIONS:
+                    - Professional, firm tone.
+                    - Cite the 'Medical Necessity' based on the notes.
+                    - Format: Header, Argument, Conclusion.
+                    """
+                    resp = client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content": prompt}])
+                    st.session_state['final_letter'] = resp.choices[0].message.content
+            else:
+                st.warning("⚠️ Please provide Patient Name and Voice Dictation.")
+
+        # Results & Export
+        if 'final_letter' in st.session_state:
+            letter_content = st.text_area("Final Draft", st.session_state['final_letter'], height=400)
+            
+            b1, b2 = st.columns(2)
+            with b1:
+                if st.button("💾 Save Record", use_container_width=True):
+                    save_to_db(patient_name, letter_content)
+            with b2:
+                pdf_bytes = create_pdf(letter_content, patient_name)
+                st.download_button("📄 Download PDF", pdf_bytes, f"{patient_name}.pdf", "application/pdf", use_container_width=True)
