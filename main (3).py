@@ -29,7 +29,7 @@ USERS = {
     }
 }
 
-# --- ROBUST CSS THEME (HIGH CONTRAST FIX) ---
+# --- ROBUST CSS THEME (FINAL CONTRAST FIX) ---
 def local_css():
     st.markdown("""
     <style>
@@ -39,12 +39,20 @@ def local_css():
         .stApp {
             background-color: #f8fafc; /* Light Gray Background */
         }
-        html, body, [class*="css"] { 
-            font-family: 'Inter', sans-serif; 
-            color: #0f172a !important; /* Force Dark Blue/Black Text Globally */
+        
+        /* 2. FORCE ALL HEADERS TO BE DARK (The Fix) */
+        h1, h2, h3, h4, h5, h6 {
+            color: #0f172a !important; /* Dark Navy/Black */
+            font-family: 'Inter', sans-serif !important;
         }
         
-        /* 2. HERO HEADERS */
+        /* 3. FORCE NORMAL TEXT TO BE DARK */
+        p, div, span, label {
+            color: #334155 !important; /* Dark Slate */
+            font-family: 'Inter', sans-serif !important;
+        }
+        
+        /* 4. HERO HEADERS SPECIFIC */
         .hero-header { 
             font-weight: 800; 
             color: #0f172a !important; 
@@ -54,7 +62,7 @@ def local_css():
         }
         .hero-sub { 
             font-size: 1.15rem; 
-            color: #334155 !important; /* Darker Gray for better visibility */
+            color: #334155 !important; 
             text-align: center; 
             margin-bottom: 2.5rem; 
             max-width: 700px;
@@ -63,50 +71,38 @@ def local_css():
             line-height: 1.6;
         }
 
-        /* 3. RESPONSIVE SIZES */
+        /* 5. RESPONSIVE SIZES */
         @media (min-width: 768px) { .hero-header { font-size: 3.5rem; } }
         @media (max-width: 768px) { .hero-header { font-size: 2.5rem; } }
         
-        /* 4. FEATURE CARDS (THE FIX) */
+        /* 6. FEATURE CARDS */
         .feature-card {
             background-color: #ffffff !important;
             padding: 1.5rem;
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            border: 1px solid #cbd5e1; /* Darker border */
+            border: 1px solid #cbd5e1;
             text-align: center;
         }
         
-        /* Force the Headlines inside cards to be BLACK */
-        .feature-card h3 {
-            color: #000000 !important; 
-            font-weight: 700 !important;
-            margin-top: 10px !important;
-            font-size: 1.2rem !important;
+        /* 7. BUTTONS */
+        /* We exclude buttons from the global color rule so they stay white text on blue background */
+        div.stButton > button:first-child { 
+            background: #2563eb !important; 
+            color: #ffffff !important;
+            border-radius: 8px; 
+            border: none; 
+            padding: 0.6rem 1.2rem; 
+            font-weight: 600; 
         }
         
-        /* Force the text inside cards to be DARK GRAY */
-        .feature-card p {
-            color: #334155 !important;
-            font-size: 1rem !important;
-            line-height: 1.5 !important;
-        }
-        
-        /* 5. BUTTONS & CONTAINERS */
+        /* 8. GLASS CONTAINERS */
         [data-testid="stVerticalBlockBorderWrapper"] { 
             border-radius: 12px; 
             padding: 2rem; 
             background: #ffffff;
             border: 1px solid #e2e8f0; 
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
-        }
-        div.stButton > button:first-child { 
-            background: #2563eb; 
-            color: white !important;
-            border-radius: 8px; 
-            border: none; 
-            padding: 0.6rem 1.2rem; 
-            font-weight: 600; 
         }
     </style>
     """, unsafe_allow_html=True)
@@ -143,9 +139,11 @@ except: supabase = None
 # --- PAGE 1: LANDING PAGE ---
 if st.session_state.page == "landing":
     
+    # 1. Navbar (The "### AppealOS" title works now because of the H3 CSS rule)
     c1, c2 = st.columns([1, 5])
     with c1: st.markdown("### 🏥 AppealOS")
 
+    # 2. Hero Section
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="hero-header">Fight Insurance Denials<br>in Seconds.</div>', unsafe_allow_html=True)
     
@@ -156,12 +154,13 @@ if st.session_state.page == "landing":
     </div>
     """, unsafe_allow_html=True)
     
+    # 3. Call to Action
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         if st.button("🚀 Launch Workspace", use_container_width=True):
             navigate_to("login")
     
-    # 4. Feature Grid (Updated for Visibility)
+    # 4. Feature Grid
     st.markdown("<br><br>", unsafe_allow_html=True)
     f1, f2, f3 = st.columns(3)
     
