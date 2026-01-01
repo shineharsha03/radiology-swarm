@@ -29,7 +29,7 @@ USERS = {
     }
 }
 
-# --- ROBUST CSS THEME (FINAL VERSION) ---
+# --- ROBUST CSS THEME ---
 def local_css():
     st.markdown("""
     <style>
@@ -52,8 +52,7 @@ def local_css():
             font-family: 'Inter', sans-serif !important;
         }
         
-        /* 4. FORCE INPUT BOXES TO BE WHITE (The Fix) */
-        /* Target Streamlit specific input classes to ensure they stay white */
+        /* 4. FORCE INPUT BOXES TO BE WHITE */
         input[type="text"], input[type="password"], textarea {
             background-color: #ffffff !important;
             color: #0f172a !important; /* Black Text */
@@ -104,4 +103,42 @@ def local_css():
         .feature-card p { color: #334155 !important; }
         
         /* 8. BUTTONS */
-        div.stButton > button:first-child {
+        div.stButton > button:first-child { 
+            background: #2563eb !important; 
+            color: #ffffff !important;
+            border-radius: 8px; 
+            border: none; 
+            padding: 0.6rem 1.2rem; 
+            font-weight: 600; 
+        }
+        
+        /* 9. GLASS CONTAINERS */
+        [data-testid="stVerticalBlockBorderWrapper"] { 
+            border-radius: 12px; 
+            padding: 2rem; 
+            background: #ffffff;
+            border: 1px solid #e2e8f0; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+local_css()
+
+# --- STATE MANAGEMENT ---
+if 'page' not in st.session_state: st.session_state.page = "landing"
+if 'user' not in st.session_state: st.session_state.user = None
+
+def navigate_to(page):
+    st.session_state.page = page
+    st.rerun()
+
+# --- CREDENTIALS ---
+try:
+    api_key = st.secrets["OPENAI_API_KEY"]
+    tavily_key = st.secrets["TAVILY_API_KEY"]
+    # Supabase is optional
+    supabase_url = st.secrets.get("SUPABASE_URL", "")
+    supabase_key = st.secrets.get("SUPABASE_KEY", "")
+except:
+    st.error("🚨 Secrets Missing.
