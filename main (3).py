@@ -16,8 +16,6 @@ st.set_page_config(
 )
 
 # --- USER DATABASE (DEMO MODE) ---
-# We are using this for the Demo. 
-# (You can switch to the Supabase 'users' table later when you are ready).
 USERS = {
     "admin": {
         "password": "admin123", 
@@ -31,46 +29,32 @@ USERS = {
     }
 }
 
-# --- ROBUST CSS THEME (FIXED FOR DARK MODE & MOBILE) ---
+# --- ROBUST CSS THEME (HIGH CONTRAST FIX) ---
 def local_css():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
         
-        /* 1. FORCE LIGHT MODE BACKGROUND */
-        /* This ensures the app looks like professional software, not a dark terminal */
+        /* 1. BACKGROUND & GLOBAL TEXT */
         .stApp {
-            background-color: #f8fafc;
+            background-color: #f8fafc; /* Light Gray Background */
         }
-        
-        /* 2. GLOBAL TEXT COLOR */
         html, body, [class*="css"] { 
             font-family: 'Inter', sans-serif; 
-            color: #1e293b !important; /* Force dark text color */
+            color: #0f172a !important; /* Force Dark Blue/Black Text Globally */
         }
         
-        /* 3. HERO HEADER (RESPONSIVE) */
+        /* 2. HERO HEADERS */
         .hero-header { 
             font-weight: 800; 
-            color: #0f172a; 
+            color: #0f172a !important; 
             text-align: center; 
             line-height: 1.2;
             margin-bottom: 1rem;
         }
-        
-        /* PC/Laptop Size */
-        @media (min-width: 768px) {
-            .hero-header { font-size: 3.5rem; }
-        }
-        
-        /* Mobile Phone Size */
-        @media (max-width: 768px) {
-            .hero-header { font-size: 2.5rem; }
-        }
-
         .hero-sub { 
             font-size: 1.15rem; 
-            color: #475569; 
+            color: #334155 !important; /* Darker Gray for better visibility */
             text-align: center; 
             margin-bottom: 2.5rem; 
             max-width: 700px;
@@ -78,30 +62,47 @@ def local_css():
             margin-right: auto;
             line-height: 1.6;
         }
+
+        /* 3. RESPONSIVE SIZES */
+        @media (min-width: 768px) { .hero-header { font-size: 3.5rem; } }
+        @media (max-width: 768px) { .hero-header { font-size: 2.5rem; } }
         
-        /* Feature Cards */
+        /* 4. FEATURE CARDS (THE FIX) */
         .feature-card {
-            background-color: white;
+            background-color: #ffffff !important;
             padding: 1.5rem;
             border-radius: 12px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid #cbd5e1; /* Darker border */
             text-align: center;
         }
         
-        /* Glassmorphism Containers */
+        /* Force the Headlines inside cards to be BLACK */
+        .feature-card h3 {
+            color: #000000 !important; 
+            font-weight: 700 !important;
+            margin-top: 10px !important;
+            font-size: 1.2rem !important;
+        }
+        
+        /* Force the text inside cards to be DARK GRAY */
+        .feature-card p {
+            color: #334155 !important;
+            font-size: 1rem !important;
+            line-height: 1.5 !important;
+        }
+        
+        /* 5. BUTTONS & CONTAINERS */
         [data-testid="stVerticalBlockBorderWrapper"] { 
             border-radius: 12px; 
             padding: 2rem; 
-            background: rgba(255, 255, 255, 0.95);
+            background: #ffffff;
             border: 1px solid #e2e8f0; 
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
         }
-        
-        /* Buttons */
         div.stButton > button:first-child { 
             background: #2563eb; 
-            color: white; 
+            color: white !important;
             border-radius: 8px; 
             border: none; 
             padding: 0.6rem 1.2rem; 
@@ -142,11 +143,9 @@ except: supabase = None
 # --- PAGE 1: LANDING PAGE ---
 if st.session_state.page == "landing":
     
-    # 1. Navbar
     c1, c2 = st.columns([1, 5])
     with c1: st.markdown("### 🏥 AppealOS")
 
-    # 2. Hero Section
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="hero-header">Fight Insurance Denials<br>in Seconds.</div>', unsafe_allow_html=True)
     
@@ -157,40 +156,39 @@ if st.session_state.page == "landing":
     </div>
     """, unsafe_allow_html=True)
     
-    # 3. Call to Action
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         if st.button("🚀 Launch Workspace", use_container_width=True):
             navigate_to("login")
     
-    # 4. Feature Grid (Visual Explanation)
+    # 4. Feature Grid (Updated for Visibility)
     st.markdown("<br><br>", unsafe_allow_html=True)
     f1, f2, f3 = st.columns(3)
     
     with f1:
         st.markdown("""
         <div class="feature-card">
-            <div style="font-size: 2rem;">📄</div>
+            <div style="font-size: 2.5rem;">📄</div>
             <h3>Reads Documents</h3>
-            <p style="color:#64748b; font-size: 0.9rem;">Upload any PDF denial letter. Our Computer Vision extracts codes, patient data, and denial reasons.</p>
+            <p>Upload any PDF denial letter. Our Computer Vision extracts codes, patient data, and denial reasons.</p>
         </div>
         """, unsafe_allow_html=True)
     
     with f2:
         st.markdown("""
         <div class="feature-card">
-            <div style="font-size: 2rem;">🧠</div>
+            <div style="font-size: 2.5rem;">🧠</div>
             <h3>Researches Policy</h3>
-            <p style="color:#64748b; font-size: 0.9rem;">The AI Agent browses live insurance websites to find the exact coverage rule you need.</p>
+            <p>The AI Agent browses live insurance websites to find the exact coverage rule you need.</p>
         </div>
         """, unsafe_allow_html=True)
         
     with f3:
         st.markdown("""
         <div class="feature-card">
-            <div style="font-size: 2rem;">✍️</div>
+            <div style="font-size: 2.5rem;">✍️</div>
             <h3>Writes Appeals</h3>
-            <p style="color:#64748b; font-size: 0.9rem;">Generates specific, cited legal arguments. Download as PDF or editable Word Doc.</p>
+            <p>Generates specific, cited legal arguments. Download as PDF or editable Word Doc.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -209,7 +207,6 @@ if st.session_state.page == "login":
             password = st.text_input("Password", type="password")
             
             if st.button("Sign In", use_container_width=True):
-                # Check against the Hardcoded Dictionary (Simplest for Demo)
                 if username in USERS and USERS[username]["password"] == password:
                     st.session_state.user = USERS[username]
                     navigate_to("app")
@@ -305,8 +302,6 @@ if 'final' in st.session_state:
         with b1:
             if st.button("💾 Save to DB"):
                 if supabase:
-                    # Tries to save. If 'doctor_name' column exists, it saves it.
-                    # If not, it might error, so we wrap in try/except to be safe
                     try:
                         data = {
                             "patient_name": pn, 
