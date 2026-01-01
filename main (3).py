@@ -15,7 +15,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- USER DATABASE (DEMO) ---
+# --- USER DATABASE (DEMO MODE) ---
+# We are using this for the Demo. 
+# (You can switch to the Supabase 'users' table later when you are ready).
 USERS = {
     "admin": {
         "password": "admin123", 
@@ -29,34 +31,55 @@ USERS = {
     }
 }
 
-# --- CSS THEME ---
+# --- ROBUST CSS THEME (FIXED FOR DARK MODE & MOBILE) ---
 def local_css():
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
-        html, body, [class*="css"] { font-family: 'Inter', sans-serif; color: #1e293b; }
         
-        /* Typography */
+        /* 1. FORCE LIGHT MODE BACKGROUND */
+        /* This ensures the app looks like professional software, not a dark terminal */
+        .stApp {
+            background-color: #f8fafc;
+        }
+        
+        /* 2. GLOBAL TEXT COLOR */
+        html, body, [class*="css"] { 
+            font-family: 'Inter', sans-serif; 
+            color: #1e293b !important; /* Force dark text color */
+        }
+        
+        /* 3. HERO HEADER (RESPONSIVE) */
         .hero-header { 
-            font-size: 3.5rem; 
             font-weight: 800; 
             color: #0f172a; 
             text-align: center; 
-            line-height: 1.1;
+            line-height: 1.2;
             margin-bottom: 1rem;
         }
+        
+        /* PC/Laptop Size */
+        @media (min-width: 768px) {
+            .hero-header { font-size: 3.5rem; }
+        }
+        
+        /* Mobile Phone Size */
+        @media (max-width: 768px) {
+            .hero-header { font-size: 2.5rem; }
+        }
+
         .hero-sub { 
-            font-size: 1.25rem; 
+            font-size: 1.15rem; 
             color: #475569; 
             text-align: center; 
             margin-bottom: 2.5rem; 
             max-width: 700px;
             margin-left: auto;
             margin-right: auto;
-            line-height: 1.5;
+            line-height: 1.6;
         }
         
-        /* Feature Cards on Landing Page */
+        /* Feature Cards */
         .feature-card {
             background-color: white;
             padding: 1.5rem;
@@ -66,11 +89,11 @@ def local_css():
             text-align: center;
         }
         
-        /* Glassmorphism for App */
+        /* Glassmorphism Containers */
         [data-testid="stVerticalBlockBorderWrapper"] { 
             border-radius: 12px; 
             padding: 2rem; 
-            background: rgba(255, 255, 255, 0.9); 
+            background: rgba(255, 255, 255, 0.95);
             border: 1px solid #e2e8f0; 
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
         }
@@ -116,7 +139,7 @@ try:
     supabase = create_client(supabase_url, supabase_key)
 except: supabase = None
 
-# --- PAGE 1: LANDING PAGE (UPDATED) ---
+# --- PAGE 1: LANDING PAGE ---
 if st.session_state.page == "landing":
     
     # 1. Navbar
@@ -127,7 +150,6 @@ if st.session_state.page == "landing":
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="hero-header">Fight Insurance Denials<br>in Seconds.</div>', unsafe_allow_html=True)
     
-    # THE CONCISE INTRO YOU REQUESTED
     st.markdown("""
     <div class="hero-sub">
     AppealOS is an AI agent that <b>reads denial letters</b>, <b>researches payer policies</b> (Aetna, BCBS, etc.), 
@@ -187,6 +209,7 @@ if st.session_state.page == "login":
             password = st.text_input("Password", type="password")
             
             if st.button("Sign In", use_container_width=True):
+                # Check against the Hardcoded Dictionary (Simplest for Demo)
                 if username in USERS and USERS[username]["password"] == password:
                     st.session_state.user = USERS[username]
                     navigate_to("app")
@@ -282,12 +305,20 @@ if 'final' in st.session_state:
         with b1:
             if st.button("💾 Save to DB"):
                 if supabase:
-                    supabase.table("appeals").insert({
-                        "patient_name": pn, 
-                        "final_letter": txt, 
-                        "doctor_name": current_user['name'],
-                        "created_at": str(datetime.datetime.now())
-                    }).execute()
-                    st.toast(f"Saved by {current_user['name']}")
+                    # Tries to save. If 'doctor_name' column exists, it saves it.
+                    # If not, it might error, so we wrap in try/except to be safe
+                    try:
+                        data = {
+                            "patient_name": pn, 
+                            "final_letter": txt, 
+                            "created_at": str(datetime.datetime.now()),
+                            "doctor_name": current_user['name']
+                        }
+                        supabase.table("appeals").insert(data).execute()
+                        st.toast(f"Saved by {current_user['name']}")
+                    except Exception as e:
+                        st.error(f"DB Error: {e}")
+                else:
+                    st.warning("Database not connected")
         with b2: st.download_button("PDF", pdf, "appeal.pdf")
         with b3: st.download_button("Word", doc, "appeal.docx")
