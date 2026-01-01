@@ -1,35 +1,3 @@
-This error happens because the line of code for the AI generation is too long, and when you copy-pasted it, it got cut in half.
-
-I have fixed this by breaking that long line into smaller, safer pieces.
-
-Option 1: Quick Fix (Replace just the "Actions" section) Scroll down to the bottom of your code (around line 280) where you see with col_right:. Replace that whole block with this safer version:
-
-Python
-
-with col_right:
-    st.subheader("Actions")
-    if st.button("✨ Generate Appeal", type="primary", use_container_width=True):
-        vn = st.session_state.get('v_txt')
-        if vn:
-            with st.status("Researching..."): 
-                pol = research(ins, proc)
-            with st.spinner("Writing..."):
-                # I broke this long line into 3 parts so it won't break again
-                pmt = f"Write appeal. Author: {current_user['name']}. Pat: {pn}. Ins: {ins}. Note: {vn}. Pol: {pol}"
-                
-                response = client.chat.completions.create(
-                    model="gpt-4o", 
-                    messages=[{"role":"user", "content":pmt}]
-                )
-                st.session_state['final'] = response.choices[0].message.content
-        else: 
-            st.warning("Dictate notes first.")
-Option 2: The Complete "Safe" File (Recommended) I have reformatted the entire file to use shorter lines. This guarantees no more "SyntaxError" when you copy it.
-
-Copy this entire block and replace your main.py:
-
-Python
-
 import streamlit as st
 import os
 from openai import OpenAI
