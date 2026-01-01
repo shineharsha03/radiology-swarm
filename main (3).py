@@ -1,3 +1,35 @@
+This error happens because the line of code for the AI generation is too long, and when you copy-pasted it, it got cut in half.
+
+I have fixed this by breaking that long line into smaller, safer pieces.
+
+Option 1: Quick Fix (Replace just the "Actions" section) Scroll down to the bottom of your code (around line 280) where you see with col_right:. Replace that whole block with this safer version:
+
+Python
+
+with col_right:
+    st.subheader("Actions")
+    if st.button("✨ Generate Appeal", type="primary", use_container_width=True):
+        vn = st.session_state.get('v_txt')
+        if vn:
+            with st.status("Researching..."): 
+                pol = research(ins, proc)
+            with st.spinner("Writing..."):
+                # I broke this long line into 3 parts so it won't break again
+                pmt = f"Write appeal. Author: {current_user['name']}. Pat: {pn}. Ins: {ins}. Note: {vn}. Pol: {pol}"
+                
+                response = client.chat.completions.create(
+                    model="gpt-4o", 
+                    messages=[{"role":"user", "content":pmt}]
+                )
+                st.session_state['final'] = response.choices[0].message.content
+        else: 
+            st.warning("Dictate notes first.")
+Option 2: The Complete "Safe" File (Recommended) I have reformatted the entire file to use shorter lines. This guarantees no more "SyntaxError" when you copy it.
+
+Copy this entire block and replace your main.py:
+
+Python
+
 import streamlit as st
 import os
 from openai import OpenAI
@@ -29,7 +61,7 @@ USERS = {
     }
 }
 
-# --- ROBUST CSS THEME (FINAL VERSION) ---
+# --- ROBUST CSS THEME ---
 def local_css():
     st.markdown("""
     <style>
@@ -37,25 +69,25 @@ def local_css():
         
         /* 1. BACKGROUND & GLOBAL TEXT */
         .stApp {
-            background-color: #f8fafc; /* Light Gray Background */
+            background-color: #f8fafc;
         }
         
         /* 2. FORCE ALL HEADERS TO BE DARK */
         h1, h2, h3, h4, h5, h6 {
-            color: #0f172a !important; /* Dark Navy/Black */
+            color: #0f172a !important;
             font-family: 'Inter', sans-serif !important;
         }
         
         /* 3. FORCE NORMAL TEXT TO BE DARK */
         p, div, span, label, li {
-            color: #334155 !important; /* Dark Slate */
+            color: #334155 !important;
             font-family: 'Inter', sans-serif !important;
         }
         
         /* 4. FORCE INPUT BOXES TO BE WHITE */
         input[type="text"], input[type="password"], textarea {
             background-color: #ffffff !important;
-            color: #0f172a !important; /* Black Text */
+            color: #0f172a !important;
             border: 1px solid #cbd5e1 !important;
         }
         
@@ -243,18 +275,37 @@ with st.sidebar:
 # FUNCTIONS
 def extract_from_pdf(f):
     try:
-        with pdfplumber.open(f) as pdf: t = "".join([p.extract_text() for p in pdf.pages])
+        with pdfplumber.open(f) as pdf: 
+            t = "".join([p.extract_text() for p in pdf.pages])
         p = f"Extract: 1.Patient 2.Insurance 3.Reason from: {t[:3000]}"
-        return client.chat.completions.create(model="gpt-4o", messages=[{"role":"user", "content":p}]).choices[0].message.content
+        
+        response = client.chat.completions.create(
+            model="gpt-4o", 
+            messages=[{"role":"user", "content":p}]
+        )
+        return response.choices[0].message.content
     except: return "Error"
 
 def research(ins, proc):
-    try: return "\n".join([r['content'] for r in tavily.search(query=f"{ins} policy {proc} 2024", max_results=3)['results']])
+    try: 
+        results = tavily.search(query=f"{ins} policy {proc} 2024", max_results=3)['results']
+        return "\n".join([r['content'] for r in results])
     except: return "Manual Search Needed"
 
 def create_files(txt, pat):
-    pdf = FPDF(); pdf.add_page(); pdf.set_font("Arial", size=11); pdf.multi_cell(0, 6, txt.encode('latin-1','replace').decode('latin-1'))
-    doc = Document(); doc.add_paragraph(txt); b = BytesIO(); doc.save(b); b.seek(0)
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=11)
+    # Safe encode to prevent errors
+    clean_txt = txt.encode('latin-1','replace').decode('latin-1')
+    pdf.multi_cell(0, 6, clean_txt)
+    
+    doc = Document()
+    doc.add_paragraph(txt)
+    b = BytesIO()
+    doc.save(b)
+    b.seek(0)
+    
     return pdf.output(dest="S").encode('latin-1'), b
 
 # MAIN UI
@@ -284,7 +335,11 @@ with col_left:
         st.warning("Update Streamlit")
         
     if av: 
-        st.session_state['v_txt'] = client.audio.transcriptions.create(model="whisper-1", file=av).text
+        transcription = client.audio.transcriptions.create(
+            model="whisper-1", 
+            file=av
+        )
+        st.session_state['v_txt'] = transcription.text
         st.success("Saved")
 
 with col_right:
@@ -292,7 +347,47 @@ with col_right:
     if st.button("✨ Generate Appeal", type="primary", use_container_width=True):
         vn = st.session_state.get('v_txt')
         if vn:
-            with st.status("Researching..."): pol = research(ins, proc)
+            with st.status("Researching..."): 
+                pol = research(ins, proc)
             with st.spinner("Writing..."):
+                # SHORTENED LINES TO PREVENT ERRORS
                 pmt = f"Write appeal. Author: {current_user['name']}. Pat: {pn}. Ins: {ins}. Note: {vn}. Pol: {pol}"
-                st.session_state['
+                
+                response = client.chat.completions.create(
+                    model="gpt-4o", 
+                    messages=[{"role":"user", "content":pmt}]
+                )
+                st.session_state['final'] = response.choices[0].message.content
+        else: st.warning("Dictate notes first.")
+
+if 'final' in st.session_state:
+    st.markdown("---")
+    txt = st.text_area("Draft", st.session_state['final'], height=300)
+    
+    try:
+        pdf, doc = create_files(txt, pn)
+        files_ok = True
+    except:
+        files_ok = False
+        st.error("Error creating files")
+
+    if files_ok:
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            if st.button("💾 Save to DB"):
+                if supabase:
+                    try:
+                        data = {
+                            "patient_name": pn, 
+                            "final_letter": txt, 
+                            "created_at": str(datetime.datetime.now()),
+                            "doctor_name": current_user['name']
+                        }
+                        supabase.table("appeals").insert(data).execute()
+                        st.toast(f"Saved by {current_user['name']}")
+                    except Exception as e:
+                        st.error(f"DB Error: {e}")
+                else:
+                    st.warning("Database not connected")
+        with b2: st.download_button("PDF", pdf, "appeal.pdf")
+        with b3: st.download_button("Word", doc, "appeal.docx")
