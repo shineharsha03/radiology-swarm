@@ -36,31 +36,55 @@ def local_css():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
             
+            /* 1. Global Background */
             .stApp {
                 background-color: #f8fafc;
             }
             
+            /* 2. Text Colors */
             h1, h2, h3, h4, h5, h6 {
                 color: #0f172a !important;
                 font-family: 'Inter', sans-serif !important;
             }
-            
             p, div, span, label, li {
                 color: #334155 !important;
                 font-family: 'Inter', sans-serif !important;
             }
             
+            /* 3. Text Inputs (White Background) */
             input[type="text"], input[type="password"], textarea {
                 background-color: #ffffff !important;
                 color: #0f172a !important;
                 border: 1px solid #cbd5e1 !important;
             }
-            
             .stTextInput > label, .stTextArea > label {
                 color: #0f172a !important;
                 font-weight: 600 !important;
             }
             
+            /* 4. FILE UPLOADER FIX (The Box you Drag Into) */
+            [data-testid="stFileUploaderDropzone"] {
+                background-color: #ffffff !important;
+                border: 1px solid #cbd5e1 !important;
+            }
+            [data-testid="stFileUploaderDropzone"] div, 
+            [data-testid="stFileUploaderDropzone"] span, 
+            [data-testid="stFileUploaderDropzone"] small {
+                color: #334155 !important; /* Force "Drag and Drop" text to be dark */
+            }
+            
+            /* 5. AUDIO INPUT FIX (The Dictation Box) */
+            [data-testid="stAudioInput"] {
+                background-color: #ffffff !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 8px !important;
+            }
+            /* Force the microphone icon and text inside to be dark */
+            [data-testid="stAudioInput"] * {
+                color: #0f172a !important; 
+            }
+
+            /* 6. Hero & Landing Page */
             .hero-header { 
                 font-weight: 800; 
                 color: #0f172a !important; 
@@ -68,7 +92,6 @@ def local_css():
                 line-height: 1.2;
                 margin-bottom: 1rem;
             }
-
             .hero-sub { 
                 font-size: 1.15rem; 
                 color: #334155 !important; 
@@ -79,10 +102,10 @@ def local_css():
                 margin-right: auto;
                 line-height: 1.6;
             }
-
             @media (min-width: 768px) { .hero-header { font-size: 3.5rem; } }
             @media (max-width: 768px) { .hero-header { font-size: 2.5rem; } }
             
+            /* 7. Feature Cards */
             .feature-card {
                 background-color: #ffffff !important;
                 padding: 1.5rem;
@@ -91,10 +114,10 @@ def local_css():
                 border: 1px solid #cbd5e1;
                 text-align: center;
             }
-            
             .feature-card h3 { color: #0f172a !important; }
             .feature-card p { color: #334155 !important; }
             
+            /* 8. Buttons & Containers */
             div.stButton > button:first-child { 
                 background: #2563eb !important; 
                 color: #ffffff !important;
@@ -103,7 +126,6 @@ def local_css():
                 padding: 0.6rem 1.2rem; 
                 font-weight: 600; 
             }
-            
             [data-testid="stVerticalBlockBorderWrapper"] { 
                 border-radius: 12px; 
                 padding: 2rem; 
